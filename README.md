@@ -1,2 +1,2 @@
 # Parley
-App #1 - Set up group events with pizazz!
+App #1 - Set up events with Pizzazz!
