@@ -1,7 +1,10 @@
 package app
 
-import "fmt"
+import "github.com/FreeCodeUserJack/Parley/tools/logger"
 
 func StartApplication() {
-	fmt.Println("app started")
+
+	logger.Info("app initilization started")
+
+	logger.Info("app initilization finished")
 }
