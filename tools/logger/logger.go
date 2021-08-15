@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -23,6 +24,11 @@ type logger struct {
 
 type appLogger interface {
 	// add mongoDB logger func signatures
+	Print(v ...interface{})
+}
+
+func (l logger) Print(v ...interface{}) {
+	Info(fmt.Sprintf("%v", v))
 }
 
 func init() {
@@ -35,7 +41,7 @@ func init() {
 			TimeKey: "time",
 			MessageKey: "msg",
 			EncodeTime: zapcore.ISO8601TimeEncoder,
-			EncodeLevel: zapcore.LowercaseColorLevelEncoder,
+			EncodeLevel: zapcore.LowercaseLevelEncoder,
 			EncodeCaller: zapcore.ShortCallerEncoder,
 		},
 	}
@@ -91,7 +97,9 @@ func getFields(tags []string) []zapcore.Field {
 
 	for _, tag := range tags {
 		input := strings.Split(tag, ":")
-		fieldTags = append(fieldTags, zap.String(input[0], input[1]))
+		if len(input) > 1 {
+			fieldTags = append(fieldTags, zap.String(input[0], input[1]))
+		}
 	}
 
 	return fieldTags
