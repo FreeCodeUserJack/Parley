@@ -2,11 +2,12 @@ package app
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/controllers"
+	"github.com/FreeCodeUserJack/Parley/pkg/repository"
+	"github.com/FreeCodeUserJack/Parley/pkg/services"
 	"github.com/FreeCodeUserJack/Parley/tools/logger"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -33,19 +34,25 @@ func StartApplication() {
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
 
-	// use our custome logger
-	middleware.DefaultLogger = middleware.RequestLogger(&middleware.DefaultLogFormatter{Logger: logger.GetLogger()})
+	// use our custom logger
+	middleware.DefaultLogger = middleware.RequestLogger(&middleware.DefaultLogFormatter{Logger: logger.GetLogger(), NoColor: true})
 
 	router.Use(middleware.DefaultLogger)
 	router.Use(middleware.Recoverer)
 
 	router.Get("/api/v1/health", controllers.HealthCheck)
 
-	// mount Users and Agreements routes
-	router.Mount("/api/v1/users", usersResource{}.Routes())
-	router.Mount("/api/v1/agreements", agreementsResource{}.Routes())
+	// setup Users repo/service and mount Users routes
+	router.Mount("/api/v1/users", controllers.UsersController.Routes())
 
-	log.Fatal(http.ListenAndServe(":" + port, router))
+	// setup Agreements repo/service and mount Agreements routes
+	agreementRepo := repository.NewAgreementRepository()
+	agreementService := services.NewAgreementService(agreementRepo)
+	router.Mount("/api/v1/agreements", controllers.NewAgreementController(agreementService).Routes())
 
 	logger.Info("app initilization finished")
+
+	if err := http.ListenAndServe(":" + port, router); err != nil {
+		logger.Fatal("app failed to ListenAndServe", err)
+	}
 }

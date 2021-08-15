@@ -24,7 +24,7 @@ type logger struct {
 
 type appLogger interface {
 	// add mongoDB logger func signatures
-	Print(v ...interface{})
+	Print(v ...interface{}) // go-chi logger interface
 }
 
 func (l logger) Print(v ...interface{}) {
@@ -89,6 +89,14 @@ func Error(msg string, err error, tags ...string) {
 	fieldTags = append(fieldTags, zap.NamedError("error", err))
 	
 	log.log.Error(msg, fieldTags...)
+	log.log.Sync()
+}
+
+func Fatal(msg string, err error, tags ...string) {
+	fieldTags := getFields(tags)
+	fieldTags = append(fieldTags, zap.NamedError("error", err))
+
+	log.log.Fatal(msg, fieldTags...)
 	log.log.Sync()
 }
 
