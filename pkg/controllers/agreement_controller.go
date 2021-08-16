@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
 	"github.com/FreeCodeUserJack/Parley/pkg/services"
@@ -183,7 +185,27 @@ func (a agreementsResource) GetAgreement(w http.ResponseWriter, r *http.Request)
 }
 
 func (a agreementsResource) SearchAgreements(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller SearchAgreements about to get req url query params", context_utils.GetTraceAndClientIds(r.Context())...)
 
+	queryParams := strings.Split(strings.Split(r.URL.String(), "?")[1], "=")
+	searchKey := queryParams[0]
+	searchValue := queryParams[1]
+
+	searchValue, escapeErr := url.QueryUnescape(searchValue)
+	if escapeErr != nil {
+		logger.Error("agreement controller SearchAgreements failed to unescape query value", escapeErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("please input valid key/value query param pair"))
+		return
+	}
+
+	result, err := a.AgreementService.SearchAgreements(r.Context(), searchKey, searchValue)
+	if err != nil {
+		http_utils.ResponseError(w, err)
+		return
+	}
+
+	logger.Info("agreement controller SearchAgreements about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, result)
 }
 
 func (a agreementsResource) AddUserToAgreement(w http.ResponseWriter, r *http.Request) {

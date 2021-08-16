@@ -9,13 +9,14 @@ Request
     "status": "active"
   },
   "status": "active",
-  "public": "false"
+  "public": "false",
+  "tags": ["labor day", "party"]
 }
 
 
 Response
 {
-    "_id": "eb883441-fe3d-11eb-96da-9828a61fb3f6",
+    "_id": "21647a43-2e6c-44e1-bf71-6fd9cab56e12",
     "title": "Labor Day Party",
     "description": "We're going to have a party for Labor Day at my house!",
     "created_by": "user_123",
@@ -23,14 +24,18 @@ Response
     "participants": [
         "user_123"
     ],
-    "create_datetime": 1629082746,
-    "last_update_datetime": 1629082746,
+    "create_datetime": 1629149357,
+    "last_update_datetime": 1629149357,
     "agreement_deadline": {
         "deadline_datetime": 1629080646,
-        "notify_datetime": 1628996346,
-        "last_update_datetime": 1629082746,
+        "notify_datetime": 1629062957,
+        "last_update_datetime": 1629149357,
         "status": "active"
     },
     "status": "active",
-    "public": false
+    "public": "false",
+    "tags": [
+        "labor day",
+        "party"
+    ]
 }

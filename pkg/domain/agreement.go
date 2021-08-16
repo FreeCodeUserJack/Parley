@@ -12,6 +12,7 @@ type Agreement struct {
 	AgreementDeadline Deadline `bson:"agreement_deadline" json:"agreement_deadline"`
 	Status             string   `bson:"status" json:"status"`
 	Public             string     `bson:"public" json:"public"`
+	Tags []string `bson:"tags" json:"tags"`
 }
 
 // Validation

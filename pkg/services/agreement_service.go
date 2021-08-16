@@ -18,6 +18,7 @@ type AgreementServiceInterface interface {
 	DeleteAgreement(context.Context, string) (string, rest_errors.RestError)
 	UpdateAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
+	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -100,6 +101,12 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	if agreement.Public == "" {
 		agreement.Public =savedAgreement.Public
 	}
+	if len(agreement.Tags) == 0 {
+		agreement.Tags = savedAgreement.Tags
+	}
+
+	agreement.CreatedBy = savedAgreement.CreatedBy
+	agreement.ArchiveId = savedAgreement.ArchiveId
 
 	logger.Info("agreement service UpdateAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.UpdateAgreement(ctx, agreement)
@@ -112,4 +119,17 @@ func (a agreementService) GetAgreement(ctx context.Context, id string) (*domain.
 
 	logger.Info("agreement service GetAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.GetAgreement(ctx, id)
+}
+
+func (a agreementService) SearchAgreements(ctx context.Context, key string, val string) ([]domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement service SearchAgreements start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	if key == "" || val == "" {
+		return nil, rest_errors.NewBadRequestError("key/val cannot be empty")
+	}
+
+	// Sanitize key + val
+	
+	logger.Info("agreement service SearchAgreements finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.SearchAgreements(ctx, key, val)
 }
