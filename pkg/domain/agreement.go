@@ -9,9 +9,9 @@ type Agreement struct {
 	Participants       []string `bson:"participants" json:"participants"`
 	CreateDateTime     int64    `bson:"create_datetime" json:"create_datetime"`
 	LastUpdateDateTime int64    `bson:"last_update_datetime" json:"last_update_datetime"`
-	Agreement_Deadline Deadline `bson:"agreement_deadline" json:"agreement_deadline"`
+	AgreementDeadline Deadline `bson:"agreement_deadline" json:"agreement_deadline"`
 	Status             string   `bson:"status" json:"status"`
-	Public             bool     `bson:"public" json:"public"`
+	Public             string     `bson:"public" json:"public"`
 }
 
 // Validation
@@ -20,7 +20,7 @@ func (a Agreement) Validate() bool {
 		return false
 	}
 
-	if !a.Agreement_Deadline.Validate() {
+	if !a.AgreementDeadline.Validate() {
 		return false
 	}
 

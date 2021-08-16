@@ -9,7 +9,7 @@ Request
     "status": "active"
   },
   "status": "active",
-  "public": false
+  "public": "false"
 }
 
 

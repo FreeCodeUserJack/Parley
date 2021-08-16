@@ -113,12 +113,73 @@ func (a agreementsResource) DeleteAgreement(w http.ResponseWriter, r *http.Reque
 	http_utils.ResponseJSON(w, http.StatusOK, domain.Response{Message: "document deleted", Id: uuid})
 }
 
+// pass in id via url param, then body containing fields that should be updated
 func (a agreementsResource) UpdateAgreement(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller UpdateAgreement about to read agreement id", context_utils.GetTraceAndClientIds(r.Context())...)
 
+	agreementId := chi.URLParam(r, "agreementId")
+
+	if agreementId == "" {
+		reqErr := rest_errors.NewBadRequestError("agreementId is missing")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	logger.Info("agreement controller UpdateAgreement about to read body", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		restErr := rest_errors.NewBadRequestError("missing req body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+	defer r.Body.Close()
+
+	var reqAgreement domain.Agreement
+
+	jsonErr := json.Unmarshal(reqBody, &reqAgreement)
+	if jsonErr != nil {
+		fmt.Println(jsonErr)
+		restErr := rest_errors.NewBadRequestError("invalid json body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+
+	reqAgreement.Id = agreementId
+
+	res, serviceErr := a.AgreementService.UpdateAgreement(r.Context(), reqAgreement)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("agreement controller UpdateAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, res)
 }
 
 func (a agreementsResource) GetAgreement(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller GetAgreement about to get req url path id", context_utils.GetTraceAndClientIds(r.Context())...)
 
+	agreementId := chi.URLParam(r, "agreementId")
+
+	if agreementId == "" {
+		reqErr := rest_errors.NewBadRequestError("agreementId is missing")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	retAgreement, serviceErr := a.AgreementService.GetAgreement(r.Context(), agreementId)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("agreement controller GetAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, retAgreement)
 }
 
 func (a agreementsResource) SearchAgreements(w http.ResponseWriter, r *http.Request) {

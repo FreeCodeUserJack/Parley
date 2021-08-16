@@ -16,6 +16,8 @@ import (
 type AgreementServiceInterface interface {
 	NewAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
 	DeleteAgreement(context.Context, string) (string, rest_errors.RestError)
+	UpdateAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
+	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -46,10 +48,10 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 	currTime := time.Now().UTC().Unix()
 	agreement.CreateDateTime = currTime
 	agreement.LastUpdateDateTime = currTime
-	agreement.Agreement_Deadline.LastUpdateDatetime = currTime
+	agreement.AgreementDeadline.LastUpdateDatetime = currTime
 
-	if agreement.Agreement_Deadline.NotifyDateTime == 0 {
-		agreement.Agreement_Deadline.NotifyDateTime = time.Unix(currTime, 0).UTC().Add(time.Hour * -24).Unix()
+	if agreement.AgreementDeadline.NotifyDateTime == 0 {
+		agreement.AgreementDeadline.NotifyDateTime = time.Unix(currTime, 0).UTC().Add(time.Hour * -24).Unix()
 	}
 
 	logger.Info("agreement service NewAgreement end", context_utils.GetTraceAndClientIds(ctx)...)
@@ -59,12 +61,55 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 func (a agreementService) DeleteAgreement(ctx context.Context, id string) (string, rest_errors.RestError) {
 	logger.Info("agreement service DeleteAgreement called", context_utils.GetTraceAndClientIds(ctx)...)
 
-	// Check for UUID size
-	// if len([]byte(id)) != 16 {
-	// 	logger.Error("invalid uuid size", errors.New("bytes length of uuid is not 16: " + strconv.Itoa(len([]byte(id)))), context_utils.GetTraceAndClientIds(ctx)...)
-	// 	return nil, rest_errors.NewBadRequestError("invalid uuid")
-	// }
+	//Sanitize the id string
 
 	logger.Info("agreement service DeleteAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.DeleteAgreement(ctx, id)
+}
+
+func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.Agreement) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement service UpdateAgreement called", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize fields
+
+	// Get Existing Agreement and update fields that are different
+	currTime := time.Now().UTC().Unix()
+	agreement.LastUpdateDateTime = currTime
+	agreement.AgreementDeadline.LastUpdateDatetime = currTime
+
+	savedAgreement, getErr := a.GetAgreement(ctx, agreement.Id)
+	if getErr != nil {
+		return nil, rest_errors.NewInternalServerError("could not get doc for update with id: " + agreement.Id, errors.New("database error"))
+	}
+
+	if agreement.Title == "" {
+		agreement.Title = savedAgreement.Title
+	}
+	if agreement.Description == "" {
+		agreement.Description = savedAgreement.Description
+	}
+	if len(agreement.Participants) == 0 {
+		agreement.Participants = savedAgreement.Participants
+	}
+	if agreement.AgreementDeadline.DeadlineDateTime == 0 {
+		agreement.AgreementDeadline = savedAgreement.AgreementDeadline
+	}
+	if agreement.Status == "" {
+		agreement.Status = savedAgreement.Status
+	}
+	if agreement.Public == "" {
+		agreement.Public =savedAgreement.Public
+	}
+
+	logger.Info("agreement service UpdateAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.UpdateAgreement(ctx, agreement)
+}
+
+func (a agreementService) GetAgreement(ctx context.Context, id string) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement service GetAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize the id string
+
+	logger.Info("agreement service GetAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.GetAgreement(ctx, id)
 }
