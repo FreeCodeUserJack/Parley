@@ -15,6 +15,7 @@ import (
 
 type AgreementServiceInterface interface {
 	NewAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
+	DeleteAgreement(context.Context, string) (string, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -38,11 +39,7 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 	// Sanitize Data
 
 	// Add UUID
-	uuid, err := uuid.NewUUID()
-	if err != nil {
-		logger.Error("error creating uuid", err, context_utils.GetTraceAndClientIds(ctx)...)
-		return nil, rest_errors.NewInternalServerError("error creating uuid", errors.New("uuid could not be created"))
-	}
+	uuid := uuid.NewString()
 	agreement.Id = uuid
 
 	// Add CreateTime/UpdateTime
@@ -57,4 +54,17 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 
 	logger.Info("agreement service NewAgreement end", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.NewAgreement(ctx, agreement)
+}
+
+func (a agreementService) DeleteAgreement(ctx context.Context, id string) (string, rest_errors.RestError) {
+	logger.Info("agreement service DeleteAgreement called", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Check for UUID size
+	// if len([]byte(id)) != 16 {
+	// 	logger.Error("invalid uuid size", errors.New("bytes length of uuid is not 16: " + strconv.Itoa(len([]byte(id)))), context_utils.GetTraceAndClientIds(ctx)...)
+	// 	return nil, rest_errors.NewBadRequestError("invalid uuid")
+	// }
+
+	logger.Info("agreement service DeleteAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.DeleteAgreement(ctx, id)
 }

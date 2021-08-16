@@ -84,7 +84,6 @@ func (a agreementsResource) NewAgreement(w http.ResponseWriter, r *http.Request)
 
 	result, serviceErr := a.AgreementService.NewAgreement(r.Context(), reqAgreement)
 	if serviceErr != nil {
-		logger.Error(serviceErr.Message(), serviceErr, context_utils.GetTraceAndClientIds(r.Context())...)
 		http_utils.ResponseError(w, serviceErr)
 		return
 	}
@@ -94,7 +93,24 @@ func (a agreementsResource) NewAgreement(w http.ResponseWriter, r *http.Request)
 }
 
 func (a agreementsResource) DeleteAgreement(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller DeleteAgreement reading url id", context_utils.GetTraceAndClientIds(r.Context())...)
+	agreementId := chi.URLParam(r, "agreementId")
 
+	if agreementId == "" {
+		reqErr := rest_errors.NewBadRequestError("agreementId is missing")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	uuid, err := a.AgreementService.DeleteAgreement(r.Context(), agreementId)
+	if err != nil {
+		http_utils.ResponseError(w, err)
+		return
+	}
+
+	logger.Info("agreement controller DeleteAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, domain.Response{Message: "document deleted", Id: uuid})
 }
 
 func (a agreementsResource) UpdateAgreement(w http.ResponseWriter, r *http.Request) {
