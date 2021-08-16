@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	port string = "8080"
+	port   string = "8080"
 	router *chi.Mux
 )
 
@@ -52,7 +52,7 @@ func StartApplication() {
 
 	logger.Info("app initilization finished")
 
-	if err := http.ListenAndServe(":" + port, router); err != nil {
+	if err := http.ListenAndServe(":"+port, router); err != nil {
 		logger.Fatal("app failed to ListenAndServe", err)
 	}
 }

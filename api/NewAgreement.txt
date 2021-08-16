@@ -1,0 +1,36 @@
+Request
+{
+  "title": "Labor Day Party",
+  "description": "We're going to have a party for Labor Day at my house!",
+  "created_by": "user_123",
+  "participants": ["user_123"],
+  "agreement_deadline": {
+    "deadline_datetime": 1629080646,
+    "status": "active"
+  },
+  "status": "active",
+  "public": false
+}
+
+
+Response
+{
+    "_id": "eb883441-fe3d-11eb-96da-9828a61fb3f6",
+    "title": "Labor Day Party",
+    "description": "We're going to have a party for Labor Day at my house!",
+    "created_by": "user_123",
+    "archive_id": "",
+    "participants": [
+        "user_123"
+    ],
+    "create_datetime": 1629082746,
+    "last_update_datetime": 1629082746,
+    "agreement_deadline": {
+        "deadline_datetime": 1629080646,
+        "notify_datetime": 1628996346,
+        "last_update_datetime": 1629082746,
+        "status": "active"
+    },
+    "status": "active",
+    "public": false
+}

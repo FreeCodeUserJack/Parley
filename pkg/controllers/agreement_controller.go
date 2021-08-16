@@ -1,9 +1,17 @@
 package controllers
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 
+	"github.com/FreeCodeUserJack/Parley/pkg/domain"
 	"github.com/FreeCodeUserJack/Parley/pkg/services"
+	"github.com/FreeCodeUserJack/Parley/pkg/utils/context_utils"
+	"github.com/FreeCodeUserJack/Parley/pkg/utils/http_utils"
+	"github.com/FreeCodeUserJack/Parley/pkg/utils/rest_errors"
+	"github.com/FreeCodeUserJack/Parley/tools/logger"
 	"github.com/go-chi/chi"
 )
 
@@ -26,7 +34,7 @@ type AgreementControllerInterface interface {
 	UpdateDeadline(w http.ResponseWriter, r *http.Request)
 }
 
-type agreementsResource struct{
+type agreementsResource struct {
 	AgreementService services.AgreementServiceInterface
 }
 
@@ -46,12 +54,43 @@ func (a agreementsResource) Routes() chi.Router {
 		r.Delete("/deadline", a.DeleteDeadline)
 		r.Put("/deadline", a.UpdateDeadline)
 	})
-	
+
 	return router
 }
 
 func (a agreementsResource) NewAgreement(w http.ResponseWriter, r *http.Request) {
-	
+
+	logger.Info("agreement controller NewAgreement reading body", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		restErr := rest_errors.NewBadRequestError("missing req body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+	defer r.Body.Close()
+
+	var reqAgreement domain.Agreement
+
+	jsonErr := json.Unmarshal(reqBody, &reqAgreement)
+	if jsonErr != nil {
+		fmt.Println(jsonErr)
+		restErr := rest_errors.NewBadRequestError("invalid json body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+
+	result, serviceErr := a.AgreementService.NewAgreement(r.Context(), reqAgreement)
+	if serviceErr != nil {
+		logger.Error(serviceErr.Message(), serviceErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("successfully returned request", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusCreated, result)
 }
 
 func (a agreementsResource) DeleteAgreement(w http.ResponseWriter, r *http.Request) {

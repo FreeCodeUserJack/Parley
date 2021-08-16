@@ -15,16 +15,16 @@ var clientInstanceError error
 var mongoOnce sync.Once
 
 const (
-	envConnectionString = "MONGODB_CONN_STRING"
-	envDatabaseName = "MONGODB_DATABASE_NAME"
-	envUsersCollectionName = "MONGODB_USERS_COLLECTION_NAME"
+	envConnectionString         = "MONGODB_CONN_STRING"
+	envDatabaseName             = "MONGODB_DATABASE_NAME"
+	envUsersCollectionName      = "MONGODB_USERS_COLLECTION_NAME"
 	envAgreementsCollectionName = "MONGODB_AGREEMENT_COLLECTION_NAME"
 )
 
 var (
 	mongoDBConnectionString = "mongodb://localhost:27017"
-	DatabaseName = "parleyDB"
-	UsersCollectionName = "users"
+	DatabaseName            = "parleyDB"
+	UsersCollectionName     = "users"
 	AgreementCollectionName = "agreements"
 )
 

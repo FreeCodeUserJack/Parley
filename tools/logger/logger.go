@@ -34,14 +34,14 @@ func (l logger) Print(v ...interface{}) {
 func init() {
 	logConfig := zap.Config{
 		OutputPaths: []string{getOutput()},
-		Level: zap.NewAtomicLevelAt(getLevel()),
-		Encoding: "json",
+		Level:       zap.NewAtomicLevelAt(getLevel()),
+		Encoding:    "json",
 		EncoderConfig: zapcore.EncoderConfig{
-			LevelKey: "lvl",
-			TimeKey: "time",
-			MessageKey: "msg",
-			EncodeTime: zapcore.ISO8601TimeEncoder,
-			EncodeLevel: zapcore.LowercaseLevelEncoder,
+			LevelKey:     "lvl",
+			TimeKey:      "time",
+			MessageKey:   "msg",
+			EncodeTime:   zapcore.ISO8601TimeEncoder,
+			EncodeLevel:  zapcore.LowercaseLevelEncoder,
 			EncodeCaller: zapcore.ShortCallerEncoder,
 		},
 	}
@@ -87,7 +87,7 @@ func Info(msg string, tags ...string) {
 func Error(msg string, err error, tags ...string) {
 	fieldTags := getFields(tags)
 	fieldTags = append(fieldTags, zap.NamedError("error", err))
-	
+
 	log.log.Error(msg, fieldTags...)
 	log.log.Sync()
 }

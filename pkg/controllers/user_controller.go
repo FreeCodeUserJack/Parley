@@ -33,7 +33,7 @@ func (u usersResource) Routes() chi.Router {
 	router.Post("/new", u.NewUser)
 	router.Get("/search", u.SearchUsers)
 
-	router.Route("/{userId}", func (r chi.Router) {
+	router.Route("/{userId}", func(r chi.Router) {
 		r.Get("/", u.GetUser)
 		r.Put("/", u.UpdateUser)
 		r.Delete("/", u.DeleteUser)
