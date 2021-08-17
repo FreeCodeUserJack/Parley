@@ -73,7 +73,9 @@ func (a agreementService) DeleteAgreement(ctx context.Context, id string) (strin
 	// Archive Agreement
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, id, "deleted", "agreement was deleted", nil)
 	if archiveErr == nil {
-		a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+		go func() {
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+		}()
 	}
 
 	logger.Info("agreement service DeleteAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
@@ -122,7 +124,9 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	// Archive Agreement Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreement.Id, "modified", "agreement was modified", savedAgreement)
 	if archiveErr == nil {
-		a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+		go func() {
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+		}()
 	}
 
 	logger.Info("agreement service UpdateAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
@@ -160,7 +164,9 @@ func (a agreementService) AddUserToAgreement(ctx context.Context, agreementId st
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
 	if archiveErr == nil {
-		a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+		go func() {
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+		}()
 	}
 
 	logger.Info("agreement service AddUserToAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
@@ -175,7 +181,9 @@ func (a agreementService) RemoveUserFromAgreement(ctx context.Context, agreement
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
 	if archiveErr == nil {
-		a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+		go func() {
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+		}()
 	}
 
 	logger.Info("agreement service RemoveUserFromAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
@@ -190,7 +198,9 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
 	if archiveErr == nil {
-		a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+		go func() {
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+		}()
 	}
 
 	// Check Nullable fields
@@ -217,7 +227,9 @@ func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
 	if archiveErr == nil {
-		a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+		go func() {
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+		}()
 	}
 
 	logger.Info("agreement service DeleteDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
