@@ -20,6 +20,7 @@ type AgreementServiceInterface interface {
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
+	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -142,4 +143,13 @@ func (a agreementService) AddUserToAgreement(ctx context.Context, agreementId st
 
 	logger.Info("agreement service AddUserToAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.AddUserToAgreement(ctx, agreementId, friendId)
+}
+
+func (a agreementService) RemoveUserFromAgreement(ctx context.Context, agreementId, friendId string) (string, rest_errors.RestError) {
+	logger.Info("agreement service RemoveUserFromAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize agreementId and friendId
+
+	logger.Info("agreement service RemoveUserFromAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.RemoveUserFromAgreement(ctx, agreementId, friendId)
 }

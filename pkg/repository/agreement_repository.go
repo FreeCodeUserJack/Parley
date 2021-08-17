@@ -22,6 +22,7 @@ type AgreementRepositoryInterface interface {
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
+	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
 }
 
 type agreementRepository struct {
@@ -238,5 +239,37 @@ func (a agreementRepository) AddUserToAgreement(ctx context.Context, agreementId
 	}
 
 	logger.Info("agreement repository AddUserToAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return friendId, nil
+}
+
+func (a agreementRepository) RemoveUserFromAgreement(ctx context.Context, agreementId, friendId string) (string, rest_errors.RestError) {
+	logger.Info("agreement repository RemoveUserFromAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	filter := bson.D{primitive.E{Key: "_id", Value: agreementId}}
+
+	updater := bson.D{primitive.E{Key: "$pull", Value: bson.D{
+		primitive.E{Key:"participants", Value: friendId},
+	}}}
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	collection := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName)
+
+	res, dbErr := collection.UpdateOne(ctx, filter, updater)
+	if dbErr != nil {
+		logger.Error(fmt.Sprintf("agreement repository RemoveUserFromAgreement failed to update (agreementId:friendId): %s:%s", agreementId, friendId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("", errors.New("database error"))
+	}
+
+	if res.MatchedCount == 0 {
+		logger.Error(fmt.Sprintf("No agreement found for id: %s: ", agreementId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", agreementId))
+	}
+
+	logger.Info("agreement repository RemoveUserFromAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return friendId, nil
 }

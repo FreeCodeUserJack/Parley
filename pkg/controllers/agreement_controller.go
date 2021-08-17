@@ -234,7 +234,26 @@ func (a agreementsResource) AddUserToAgreement(w http.ResponseWriter, r *http.Re
 }
 
 func (a agreementsResource) RemoveUserFromAgreement(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller RemoveUserFromAgreement about to get agreementId and friendId", context_utils.GetTraceAndClientIds(r.Context())...)
 
+	agreementId := chi.URLParam(r, "agreementId")
+	friendId := chi.URLParam(r, "friendId")
+
+	if agreementId == "" || friendId == "" {
+		reqErr := rest_errors.NewBadRequestError("missing agreementId or friendId")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	returnedId, serviceErr := a.AgreementService.RemoveUserFromAgreement(r.Context(), agreementId, friendId)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("agreement controller RemoveUserFromAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, domain.Response{Message: "Removed friendId from agremeent", Id: returnedId})
 }
 
 func (a agreementsResource) AddDeadline(w http.ResponseWriter, r *http.Request) {
