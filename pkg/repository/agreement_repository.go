@@ -25,6 +25,7 @@ type AgreementRepositoryInterface interface {
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	SetDeadline(context.Context, string, domain.Deadline) (*domain.Agreement, rest_errors.RestError)
+	DeleteDeadline(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 }
 
 type agreementRepository struct {
@@ -36,6 +37,7 @@ func NewAgreementRepository() AgreementRepositoryInterface {
 
 func (a agreementRepository) NewAgreement(ctx context.Context, agreement domain.Agreement) (*domain.Agreement, rest_errors.RestError) {
 	logger.Info("agreement repository NewAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
+
 	mongoDBClient, err := db.GetMongoClient()
 	if err != nil {
 		logger.Error("error when trying to get db client", err, context_utils.GetTraceAndClientIds(ctx)...)
@@ -46,7 +48,7 @@ func (a agreementRepository) NewAgreement(ctx context.Context, agreement domain.
 
 	res, err := collection.InsertOne(ctx, agreement)
 	if err != nil {
-		logger.Error("error when trying to create new agreement", err, context_utils.GetTraceAndClientIds(ctx)...)
+		logger.Error("agreement repository NewAgreement - error when trying to create new agreement", err, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewInternalServerError("error when trying to create new agreement", errors.New("database error"))
 	}
 
@@ -112,13 +114,14 @@ func (a agreementRepository) UpdateAgreement(ctx context.Context, agreement doma
 
 	collection := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName)
 
-	res, dbErr := collection.UpdateOne(ctx, filter, updater)
+	_, dbErr := collection.UpdateOne(ctx, filter, updater)
 	if dbErr != nil {
+		if dbErr.Error() == "mongo: no documents in result" {
+			logger.Error("agreement repository DeleteAgreement no doc found", errors.New("no doc with id: " + agreement.Id + " found"), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewBadRequestError("doc with id: " + agreement.Id + " not found")
+		}
 		logger.Error("agreement repository DeleteAgreement db error", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewInternalServerError("error when trying to update doc with id: " + agreement.Id, errors.New("database error"))
-	} else if res.MatchedCount == 0 {
-		logger.Error("agreement repository DeleteAgreement no doc found", errors.New("no doc with id: " + agreement.Id + " found"), context_utils.GetTraceAndClientIds(ctx)...)
-		return nil, rest_errors.NewBadRequestError("doc with id: " + agreement.Id + " not found")
 	}
 
 	logger.Info("agreement repository UpdateAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
@@ -143,7 +146,7 @@ func (a agreementRepository) GetAgreement(ctx context.Context, id string) (*doma
 	dbErr := collection.FindOne(ctx, filter).Decode(&returnedAgreement)
 	if dbErr != nil {
 		if dbErr.Error() == "mongo: no documents in result" {
-			logger.Error(fmt.Sprintf("No agreement found for id: %s: ", id), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+			logger.Error(fmt.Sprintf("agreement repository GetAgreement - No agreement found for id: %s: ", id), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
 			return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", id))
 		}
 		logger.Error("agreement repository GetAgreement db error", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
@@ -236,7 +239,7 @@ func (a agreementRepository) AddUserToAgreement(ctx context.Context, agreementId
 	}
 
 	if res.MatchedCount == 0 {
-		logger.Error(fmt.Sprintf("No agreement found for id: %s: ", agreementId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		logger.Error(fmt.Sprintf("agreement repository AddUserToAgreement - No agreement found for id: %s: ", agreementId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return "", rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", agreementId))
 	}
 
@@ -268,7 +271,7 @@ func (a agreementRepository) RemoveUserFromAgreement(ctx context.Context, agreem
 	}
 
 	if res.MatchedCount == 0 {
-		logger.Error(fmt.Sprintf("No agreement found for id: %s: ", agreementId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		logger.Error(fmt.Sprintf("agreement repository RemoveUserFromAgreement - No agreement found for id: %s: ", agreementId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return "", rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", agreementId))
 	}
 
@@ -277,7 +280,7 @@ func (a agreementRepository) RemoveUserFromAgreement(ctx context.Context, agreem
 }
 
 func (a agreementRepository) 	SetDeadline(ctx context.Context, agreementId string, deadline domain.Deadline) (*domain.Agreement, rest_errors.RestError) {
-	logger.Info("agreement repository AddDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
+	logger.Info("agreement repository SetDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	filter := bson.D{primitive.E{Key: "_id", Value: agreementId}}
 
@@ -295,13 +298,62 @@ func (a agreementRepository) 	SetDeadline(ctx context.Context, agreementId strin
 
 	res := collection.FindOneAndUpdate(ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
+	if res.Err() != nil { 
+		if res.Err().Error() == "mongo: no documents in result" {
+			logger.Error(fmt.Sprintf("No agreement found for id: %s: ", agreementId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", agreementId))
+		}
+		logger.Error(fmt.Sprintf("agreement repository SetDeadline could not FindOneAndUpdate id: %s", agreementId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to delete deadline and get doc back id: %s", agreementId), errors.New("database error"))
+	}
+
 	var resAgreement domain.Agreement
 	decodeErr := res.Decode(&resAgreement)
 	if decodeErr != nil {
-		logger.Error("agreement repository AddDeadline could not decode update doc to Agreement type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
+		logger.Error("agreement repository SetDeadline could not decode update doc to Agreement type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewInternalServerError("error when trying to retrieve updated document", errors.New("database error"))
 	}
 
-	logger.Info("agreement repository AddDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
+	logger.Info("agreement repository SetDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return &resAgreement, nil
+}
+
+func (a agreementRepository) DeleteDeadline(ctx context.Context, agreementId string) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement repository DeleteDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	filter := bson.D{primitive.E{Key: "_id", Value: agreementId}}
+
+	updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
+		primitive.E{Key: "agreement_deadline.status", Value: "deleted"},
+	}}}
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	collection := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName)
+
+	res := collection.FindOneAndUpdate(ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+	if res.Err() != nil { 
+		if res.Err().Error() == "mongo: no documents in result" {
+			logger.Error(fmt.Sprintf("No agreement found for id: %s: ", agreementId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", agreementId))
+		}
+		logger.Error(fmt.Sprintf("agreement repository DeleteDeadline could not FindOneAndUpdate id: %s", agreementId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to delete deadline and get doc back id: %s", agreementId), errors.New("database error"))
+	}
+
+	var resAgreement domain.Agreement
+	decodeErr := res.Decode(&resAgreement)
+	if decodeErr != nil {
+		logger.Error("agreement repository DeleteDeadline could not decode update doc to Agreement type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to retrieve updated document", errors.New("database error"))
+	}
+
+	logger.Info("agreement repository DeleteDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return &resAgreement, nil
+
 }

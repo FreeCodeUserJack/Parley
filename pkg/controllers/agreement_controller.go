@@ -254,7 +254,7 @@ func (a agreementsResource) RemoveUserFromAgreement(w http.ResponseWriter, r *ht
 }
 
 func (a agreementsResource) SetDeadline(w http.ResponseWriter, r *http.Request) {
-	logger.Info("agreement controller AddDeadline about to get agreementId", context_utils.GetTraceAndClientIds(r.Context())...)
+	logger.Info("agreement controller SetDeadline about to get agreementId", context_utils.GetTraceAndClientIds(r.Context())...)
 	
 	agreementId := chi.URLParam(r, "agreementId")
 
@@ -265,7 +265,7 @@ func (a agreementsResource) SetDeadline(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	logger.Info("agreement controller AddDeadline about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
+	logger.Info("agreement controller SetDeadline about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
 
 	reqBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -292,10 +292,27 @@ func (a agreementsResource) SetDeadline(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	logger.Info("agreement controller AddDeadline about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	logger.Info("agreement controller SetDeadline about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
 	http_utils.ResponseJSON(w, http.StatusCreated, result)
 }
 
 func (a agreementsResource) DeleteDeadline(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller DeleteDeadline about to get agreementId", context_utils.GetTraceAndClientIds(r.Context())...)
 
+	agreementId := chi.URLParam(r, "agreementId")
+	if agreementId == "" {
+		reqErr := rest_errors.NewBadRequestError("missing agreementId")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	returnedAgreement, serviceErr := a.AgreementService.DeleteDeadline(r.Context(), agreementId)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("agreement controller DeleteDeadline about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, returnedAgreement)
 }

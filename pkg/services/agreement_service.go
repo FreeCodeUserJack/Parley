@@ -22,6 +22,7 @@ type AgreementServiceInterface interface {
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	SetDeadline(context.Context, string, domain.Deadline) (*domain.Agreement, rest_errors.RestError)
+	DeleteDeadline(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -83,7 +84,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 
 	savedAgreement, getErr := a.GetAgreement(ctx, agreement.Id)
 	if getErr != nil {
-		return nil, rest_errors.NewInternalServerError("could not get doc for update with id: " + agreement.Id, errors.New("database error"))
+		return nil, getErr
 	}
 
 	if agreement.Title == "" {
@@ -156,7 +157,7 @@ func (a agreementService) RemoveUserFromAgreement(ctx context.Context, agreement
 }
 
 func (a agreementService) SetDeadline(ctx context.Context, agreementId string, deadline domain.Deadline) (*domain.Agreement, rest_errors.RestError) {
-	logger.Info("agreement service AddDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
+	logger.Info("agreement service SetDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize agreementId and deadline instance
 
@@ -172,6 +173,15 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 		return nil, rest_errors.NewBadRequestError("missing status field of deadline instance")
 	}
 
-	logger.Info("agreement service AddDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
+	logger.Info("agreement service SetDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.SetDeadline(ctx, agreementId, deadline)
+}
+
+func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement service DeleteDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize agreementId
+
+	logger.Info("agreement service DeleteDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.DeleteDeadline(ctx, agreementId)
 }
