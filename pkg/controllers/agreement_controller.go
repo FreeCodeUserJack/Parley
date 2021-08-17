@@ -31,9 +31,8 @@ type AgreementControllerInterface interface {
 	GetAgreement(w http.ResponseWriter, r *http.Request)
 	AddUserToAgreement(w http.ResponseWriter, r *http.Request)
 	RemoveUserFromAgreement(w http.ResponseWriter, r *http.Request)
-	AddDeadline(w http.ResponseWriter, r *http.Request)
+	SetDeadline(w http.ResponseWriter, r *http.Request)
 	DeleteDeadline(w http.ResponseWriter, r *http.Request)
-	UpdateDeadline(w http.ResponseWriter, r *http.Request)
 }
 
 type agreementsResource struct {
@@ -52,9 +51,8 @@ func (a agreementsResource) Routes() chi.Router {
 		r.Get("/", a.GetAgreement)
 		r.Post("/friend/{friendId}", a.AddUserToAgreement)
 		r.Delete("/friend/{friendId}", a.RemoveUserFromAgreement)
-		r.Post("/deadline", a.AddDeadline)
+		r.Put("/deadline", a.SetDeadline)
 		r.Delete("/deadline", a.DeleteDeadline)
-		r.Put("/deadline", a.UpdateDeadline)
 	})
 
 	return router
@@ -143,7 +141,6 @@ func (a agreementsResource) UpdateAgreement(w http.ResponseWriter, r *http.Reque
 
 	jsonErr := json.Unmarshal(reqBody, &reqAgreement)
 	if jsonErr != nil {
-		fmt.Println(jsonErr)
 		restErr := rest_errors.NewBadRequestError("invalid json body")
 		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
 		http_utils.ResponseError(w, restErr)
@@ -256,14 +253,49 @@ func (a agreementsResource) RemoveUserFromAgreement(w http.ResponseWriter, r *ht
 	http_utils.ResponseJSON(w, http.StatusOK, domain.Response{Message: "Removed friendId from agremeent", Id: returnedId})
 }
 
-func (a agreementsResource) AddDeadline(w http.ResponseWriter, r *http.Request) {
+func (a agreementsResource) SetDeadline(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller AddDeadline about to get agreementId", context_utils.GetTraceAndClientIds(r.Context())...)
+	
+	agreementId := chi.URLParam(r, "agreementId")
 
+	if agreementId == "" {
+		reqErr := rest_errors.NewBadRequestError("missing agreementId")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	logger.Info("agreement controller AddDeadline about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	reqBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		restErr := rest_errors.NewBadRequestError("missing req body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+	defer r.Body.Close()
+
+	var reqDeadline domain.Deadline
+
+	jsonErr := json.Unmarshal(reqBytes, &reqDeadline)
+	if jsonErr != nil {
+		restErr := rest_errors.NewBadRequestError("invalid json body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+
+	result, serviceErr := a.AgreementService.SetDeadline(r.Context(), agreementId, reqDeadline)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("agreement controller AddDeadline about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusCreated, result)
 }
 
 func (a agreementsResource) DeleteDeadline(w http.ResponseWriter, r *http.Request) {
-
-}
-
-func (a agreementsResource) UpdateDeadline(w http.ResponseWriter, r *http.Request) {
 
 }

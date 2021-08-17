@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type AgreementRepositoryInterface interface {
@@ -23,6 +24,7 @@ type AgreementRepositoryInterface interface {
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
+	SetDeadline(context.Context, string, domain.Deadline) (*domain.Agreement, rest_errors.RestError)
 }
 
 type agreementRepository struct {
@@ -272,4 +274,34 @@ func (a agreementRepository) RemoveUserFromAgreement(ctx context.Context, agreem
 
 	logger.Info("agreement repository RemoveUserFromAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return friendId, nil
+}
+
+func (a agreementRepository) 	SetDeadline(ctx context.Context, agreementId string, deadline domain.Deadline) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement repository AddDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	filter := bson.D{primitive.E{Key: "_id", Value: agreementId}}
+
+	updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
+		primitive.E{Key: "agreement_deadline", Value: deadline},
+	}}}
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	collection := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName)
+
+	res := collection.FindOneAndUpdate(ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+	var resAgreement domain.Agreement
+	decodeErr := res.Decode(&resAgreement)
+	if decodeErr != nil {
+		logger.Error("agreement repository AddDeadline could not decode update doc to Agreement type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to retrieve updated document", errors.New("database error"))
+	}
+
+	logger.Info("agreement repository AddDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return &resAgreement, nil
 }

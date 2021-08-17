@@ -21,6 +21,7 @@ type AgreementServiceInterface interface {
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
+	SetDeadline(context.Context, string, domain.Deadline) (*domain.Agreement, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -54,7 +55,7 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 	agreement.AgreementDeadline.LastUpdateDatetime = currTime
 
 	if agreement.AgreementDeadline.NotifyDateTime == 0 {
-		agreement.AgreementDeadline.NotifyDateTime = time.Unix(currTime, 0).UTC().Add(time.Hour * -24).Unix()
+		agreement.AgreementDeadline.NotifyDateTime = time.Unix(currTime, 0).Add(time.Hour * -24).UTC().Unix()
 	}
 
 	logger.Info("agreement service NewAgreement end", context_utils.GetTraceAndClientIds(ctx)...)
@@ -152,4 +153,25 @@ func (a agreementService) RemoveUserFromAgreement(ctx context.Context, agreement
 
 	logger.Info("agreement service RemoveUserFromAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.RemoveUserFromAgreement(ctx, agreementId, friendId)
+}
+
+func (a agreementService) SetDeadline(ctx context.Context, agreementId string, deadline domain.Deadline) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement service AddDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize agreementId and deadline instance
+
+	// Check Nullable fields
+	if deadline.NotifyDateTime == 0 {
+		deadline.NotifyDateTime = time.Unix(deadline.DeadlineDateTime, 0).Add(time.Hour * -24).UTC().Unix()
+	}
+
+	deadline.LastUpdateDatetime = time.Now().UTC().Unix()
+
+	// Status must be passed in request
+	if deadline.Status == "" {
+		return nil, rest_errors.NewBadRequestError("missing status field of deadline instance")
+	}
+
+	logger.Info("agreement service AddDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.SetDeadline(ctx, agreementId, deadline)
 }
