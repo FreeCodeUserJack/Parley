@@ -209,7 +209,28 @@ func (a agreementsResource) SearchAgreements(w http.ResponseWriter, r *http.Requ
 }
 
 func (a agreementsResource) AddUserToAgreement(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller AddUserToAgreement about to get agreementId and friendId", context_utils.GetTraceAndClientIds(r.Context())...)
 
+	agreementId := chi.URLParam(r, "agreementId")
+	friendId := chi.URLParam(r, "friendId")
+
+	// fmt.Println(agreementId, friendId)
+
+	if agreementId == "" || friendId == "" {
+		reqErr := rest_errors.NewBadRequestError("missing agreementId or friendId")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	returnedId, serviceErr := a.AgreementService.AddUserToAgreement(r.Context(), agreementId, friendId)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("agreement controller AddUserToAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, domain.Response{Message: "Added friendId to agremeent", Id: returnedId})
 }
 
 func (a agreementsResource) RemoveUserFromAgreement(w http.ResponseWriter, r *http.Request) {
