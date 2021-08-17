@@ -47,7 +47,8 @@ func StartApplication() {
 
 	// setup Agreements repo/service and mount Agreements routes
 	agreementRepo := repository.NewAgreementRepository()
-	agreementService := services.NewAgreementService(agreementRepo)
+	agreementArchiveRepo := repository.NewAgreementArchiveRepository()
+	agreementService := services.NewAgreementService(agreementRepo, agreementArchiveRepo)
 	router.Mount("/api/v1/agreements", controllers.NewAgreementController(agreementService).Routes())
 
 	logger.Info("app initilization finished")

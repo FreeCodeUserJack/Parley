@@ -19,6 +19,7 @@ const (
 	envDatabaseName             = "MONGODB_DATABASE_NAME"
 	envUsersCollectionName      = "MONGODB_USERS_COLLECTION_NAME"
 	envAgreementsCollectionName = "MONGODB_AGREEMENT_COLLECTION_NAME"
+	envAgreementArchiveCollectionName  = "MONGODB_AGREEMENT_ARCHIVE_COLLECTION_NAME"
 )
 
 var (
@@ -26,6 +27,7 @@ var (
 	DatabaseName            = "parleyDB"
 	UsersCollectionName     = "users"
 	AgreementCollectionName = "agreements"
+	AgreementArchiveCollectionName = "agreement_archive"
 )
 
 func init() {
@@ -43,6 +45,10 @@ func init() {
 
 	if agreementcolname := os.Getenv(envAgreementsCollectionName); agreementcolname != "" {
 		AgreementCollectionName = agreementcolname
+	}
+
+	if agreementarchivecolname := os.Getenv(envAgreementArchiveCollectionName); agreementarchivecolname != "" {
+		AgreementArchiveCollectionName = agreementarchivecolname
 	}
 }
 

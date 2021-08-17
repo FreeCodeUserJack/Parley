@@ -5,7 +5,6 @@ type Agreement struct {
 	Title              string   `bson:"title" json:"title"`
 	Description        string   `bson:"description" json:"description"`
 	CreatedBy          string   `bson:"created_by" json:"created_by"`
-	ArchiveId          string   `bson:"archive_id" json:"archive_id"`
 	Participants       []string `bson:"participants" json:"participants"`
 	CreateDateTime     int64    `bson:"create_datetime" json:"create_datetime"`
 	LastUpdateDateTime int64    `bson:"last_update_datetime" json:"last_update_datetime"`
