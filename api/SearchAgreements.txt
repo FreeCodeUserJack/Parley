@@ -1,0 +1,30 @@
+Request
+localhost:8080/api/v1/agreements/search?tags=day
+
+Response
+[
+    {
+        "_id": "21647a43-2e6c-44e1-bf71-6fd9cab56e12",
+        "title": "Labor Day Party",
+        "description": "We're going to have a party for Labor Day at my house!",
+        "created_by": "user_123",
+        "archive_id": "",
+        "participants": [
+            "user_123"
+        ],
+        "create_datetime": 1629149357,
+        "last_update_datetime": 1629149357,
+        "agreement_deadline": {
+            "deadline_datetime": 12345678901,
+            "notify_datetime": 12345592501,
+            "last_update_datetime": 1629168977,
+            "status": "active"
+        },
+        "status": "active",
+        "public": "false",
+        "tags": [
+            "labor day",
+            "party"
+        ]
+    }
+]

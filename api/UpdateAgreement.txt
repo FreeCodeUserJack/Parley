@@ -1,0 +1,30 @@
+Request
+{
+    "title": "Labor Day Party 3",
+    "description": "We're going to have a party for Labor Day at my house! 3"
+}
+
+Response
+{
+    "_id": "94a85322-cbf7-4fd7-b11e-c4e39d9fbede",
+    "title": "Labor Day Party 3",
+    "description": "We're going to have a party for Labor Day at my house! 3",
+    "created_by": "user_123",
+    "participants": [
+        "user_123"
+    ],
+    "create_datetime": 0,
+    "last_update_datetime": 1629213138,
+    "agreement_deadline": {
+        "deadline_datetime": 1629080646,
+        "notify_datetime": 1629126636,
+        "last_update_datetime": 1629213036,
+        "status": "active"
+    },
+    "status": "modified",
+    "public": "false",
+    "tags": [
+        "labor day",
+        "party"
+    ]
+}

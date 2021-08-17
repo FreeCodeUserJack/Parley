@@ -141,6 +141,7 @@ func (a agreementService) GetAgreement(ctx context.Context, id string) (*domain.
 func (a agreementService) SearchAgreements(ctx context.Context, key string, val string) ([]domain.Agreement, rest_errors.RestError) {
 	logger.Info("agreement service SearchAgreements start", context_utils.GetTraceAndClientIds(ctx)...)
 
+	// Cannot search for all agreements
 	if key == "" || val == "" {
 		return nil, rest_errors.NewBadRequestError("key/val cannot be empty")
 	}
