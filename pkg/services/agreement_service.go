@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
@@ -23,18 +24,20 @@ type AgreementServiceInterface interface {
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	SetDeadline(context.Context, string, domain.Deadline) (*domain.Agreement, rest_errors.RestError)
 	DeleteDeadline(context.Context, string) (*domain.Agreement, rest_errors.RestError)
-	ActionAndNotification(context.Context, string, domain.Notification) rest_errors.RestError
+	ActionAndNotification(context.Context, string, domain.Notification) (*domain.Notification, rest_errors.RestError)
 }
 
 type agreementService struct {
 	AgreementRepository        repository.AgreementRepositoryInterface
 	AgreementArchiveRepository repository.AgreementArchiveRepositoryInterface
+	NotificationRepository     repository.NotificationRepositoryInterface
 }
 
-func NewAgreementService(agreementRepo repository.AgreementRepositoryInterface, agreementArchiveRepo repository.AgreementArchiveRepositoryInterface) AgreementServiceInterface {
+func NewAgreementService(agreementRepo repository.AgreementRepositoryInterface, agreementArchiveRepo repository.AgreementArchiveRepositoryInterface, notificationRepo repository.NotificationRepositoryInterface) AgreementServiceInterface {
 	return &agreementService{
 		AgreementRepository:        agreementRepo,
 		AgreementArchiveRepository: agreementArchiveRepo,
+		NotificationRepository:     notificationRepo,
 	}
 }
 
@@ -53,14 +56,20 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 	agreement.Id = uuid
 
 	// Add CreateTime/UpdateTime
-	currTime := time.Now().UTC().Unix()
+	currTime := time.Now().UTC()
 	agreement.CreateDateTime = currTime
 	agreement.LastUpdateDateTime = currTime
 	agreement.AgreementDeadline.LastUpdateDatetime = currTime
 
-	if agreement.AgreementDeadline.NotifyDateTime == 0 {
-		agreement.AgreementDeadline.NotifyDateTime = time.Unix(currTime, 0).Add(time.Hour * -24).UTC().Unix()
+	if agreement.AgreementDeadline.NotifyDateTime.IsZero() {
+		agreement.AgreementDeadline.NotifyDateTime = agreement.AgreementDeadline.DeadlineDateTime.Add(time.Hour * -24).UTC()
 	}
+
+	// Initialize 4 slices
+	agreement.InvitedParticipants = []string{}
+	agreement.RequestedParticipants = []string{}
+	agreement.PendingRemovalParticipants = []string{}
+	agreement.PendingLeaveParticipants = []string{}
 
 	logger.Info("agreement service NewAgreement end", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.NewAgreement(ctx, agreement)
@@ -89,7 +98,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	// Sanitize fields
 
 	// Get Existing Agreement and update fields that are different
-	currTime := time.Now().UTC().Unix()
+	currTime := time.Now().UTC()
 	agreement.LastUpdateDateTime = currTime
 	agreement.AgreementDeadline.LastUpdateDatetime = currTime
 
@@ -107,7 +116,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	if len(agreement.Participants) == 0 {
 		agreement.Participants = savedAgreement.Participants
 	}
-	if agreement.AgreementDeadline.DeadlineDateTime == 0 {
+	if agreement.AgreementDeadline.DeadlineDateTime.IsZero() {
 		agreement.AgreementDeadline = savedAgreement.AgreementDeadline
 	}
 	if agreement.Status == "" {
@@ -205,11 +214,11 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 	}
 
 	// Check Nullable fields
-	if deadline.NotifyDateTime == 0 {
-		deadline.NotifyDateTime = time.Unix(deadline.DeadlineDateTime, 0).Add(time.Hour * -24).UTC().Unix()
+	if deadline.NotifyDateTime.IsZero() {
+		deadline.NotifyDateTime = deadline.DeadlineDateTime.Add(time.Hour * -24).UTC()
 	}
 
-	deadline.LastUpdateDatetime = time.Now().UTC().Unix()
+	deadline.LastUpdateDatetime = time.Now().UTC()
 
 	// Status must be passed in request
 	if deadline.Status == "" {
@@ -248,31 +257,52 @@ func archiveAgreementHelper(ctx context.Context, agreementRepo repository.Agreem
 	}
 
 	agreement.Status = status
-	currTime := time.Now().UTC().Unix()
+	currTime := time.Now().UTC()
 	agreement.LastUpdateDateTime = currTime
 	agreementArchive := domain.AgreementArchive{
 		Id:             uuid.NewString(),
 		AgreementData:  *agreement,
-		CreateDateTime: currTime,
+		CreateDateTime: time.Now().UTC(),
 		Info:           info,
 	}
 
 	return &agreementArchive, nil
 }
 
-func (a agreementService) ActionAndNotification(ctx context.Context, action string, notification domain.Notification) rest_errors.RestError {
+func (a agreementService) ActionAndNotification(ctx context.Context, action string, notification domain.Notification) (*domain.Notification, rest_errors.RestError) {
 	logger.Info("agreement service ActionAndNotification start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize action string and notification instance
 
+	// Set uuid
+	notification.Id = uuid.NewString()
+
 	// Get appropriate inputs for repository
 	actionInputs := getActionAndNotificationInputs(action)
 	if actionInputs != nil {
-		return rest_errors.NewBadRequestError("action not supported")
+		return nil, rest_errors.NewBadRequestError("action not supported")
+	}
+
+	doneChan := make(chan int)
+	go func(c chan int) {
+		defer close(c)
+		a.AgreementRepository.ActionAndNotification(ctx, actionInputs, notification)
+		doneChan <- 1
+	}(doneChan)
+
+	notificationResult, repoErr := a.NotificationRepository.SaveNotification(ctx, notification)
+
+	select {
+	case done := <-doneChan:
+		logger.Info(fmt.Sprintf("notification created: %v, chan output: %d", notification, done), context_utils.GetTraceAndClientIds(ctx)...)
+	case <-time.After(5 * time.Second):
+		logger.Error("agreement service ActionAndNotification - couldn't save notification", fmt.Errorf("could not update agreement/user for notification: %v", notification), context_utils.GetTraceAndClientIds(ctx)...)
+		a.NotificationRepository.DeleteNotification(ctx, notification.Id) // if this fails then complete failure... - maybe put in Fatal Inconsistency DB
+		return nil, rest_errors.NewInternalServerError(fmt.Sprintf("could not ActionAndNotification for %v", notification), errors.New("database error"))
 	}
 
 	logger.Info("agreement service ActionAndNotification finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return a.AgreementRepository.ActionAndNotification(ctx, actionInputs, notification)
+	return notificationResult, repoErr
 }
 
 func getActionAndNotificationInputs(action string) []string {
@@ -292,5 +322,4 @@ var actionCodes map[string][]string
 
 func init() {
 	actionCodes = map[string][]string{}
-
 }

@@ -26,7 +26,7 @@ type AgreementRepositoryInterface interface {
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	SetDeadline(context.Context, string, domain.Deadline) (*domain.Agreement, rest_errors.RestError)
 	DeleteDeadline(context.Context, string) (*domain.Agreement, rest_errors.RestError)
-	ActionAndNotification(context.Context, []string, domain.Notification) rest_errors.RestError
+	ActionAndNotification(context.Context, []string, domain.Notification) (*domain.Notification, rest_errors.RestError)
 }
 
 type agreementRepository struct {
@@ -47,13 +47,11 @@ func (a agreementRepository) NewAgreement(ctx context.Context, agreement domain.
 
 	collection := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName)
 
-	res, err := collection.InsertOne(ctx, agreement)
-	if err != nil {
-		logger.Error("agreement repository NewAgreement - error when trying to create new agreement", err, context_utils.GetTraceAndClientIds(ctx)...)
+	_, dbErr := collection.InsertOne(ctx, agreement)
+	if dbErr != nil {
+		logger.Error("agreement repository NewAgreement - error when trying to create new agreement", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewInternalServerError("error when trying to create new agreement", errors.New("database error"))
 	}
-
-	agreement.Id = res.InsertedID.(string)
 
 	logger.Info("agreement repository NewAgreement end", context_utils.GetTraceAndClientIds(ctx)...)
 	return &agreement, nil
@@ -350,9 +348,9 @@ func (a agreementRepository) DeleteDeadline(ctx context.Context, agreementId str
 	return &resAgreement, nil
 }
 
-func (a agreementRepository) ActionAndNotification(ctx context.Context, actionInputs []string, notification domain.Notification) rest_errors.RestError {
+func (a agreementRepository) ActionAndNotification(ctx context.Context, actionInputs []string, notification domain.Notification) (*domain.Notification, rest_errors.RestError) {
 	logger.Info("agreement repository ActionAndNotification start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	logger.Info("agreement repository ActionAndNotification finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return nil
+	return nil, nil
 }

@@ -20,6 +20,7 @@ const (
 	envUsersCollectionName            = "MONGODB_USERS_COLLECTION_NAME"
 	envAgreementsCollectionName       = "MONGODB_AGREEMENT_COLLECTION_NAME"
 	envAgreementArchiveCollectionName = "MONGODB_AGREEMENT_ARCHIVE_COLLECTION_NAME"
+	envNotificationCollectionName     = "MONGODB_NOTIFICATION_COLLECTION_NAME"
 )
 
 var (
@@ -28,6 +29,7 @@ var (
 	UsersCollectionName            = "users"
 	AgreementCollectionName        = "agreements"
 	AgreementArchiveCollectionName = "agreement_archive"
+	NotificationCollectionName     = "notifications"
 )
 
 func init() {
@@ -49,6 +51,10 @@ func init() {
 
 	if agreementarchivecolname := os.Getenv(envAgreementArchiveCollectionName); agreementarchivecolname != "" {
 		AgreementArchiveCollectionName = agreementarchivecolname
+	}
+
+	if notificationcolname := os.Getenv(envNotificationCollectionName); notificationcolname != "" {
+		NotificationCollectionName = notificationcolname
 	}
 }
 

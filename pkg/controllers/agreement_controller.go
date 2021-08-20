@@ -342,12 +342,12 @@ func (a agreementsResource) ActionAndNotification(w http.ResponseWriter, r *http
 		return
 	}
 
-	serviceErr := a.AgreementService.ActionAndNotification(r.Context(), notificationAction.Action, notificationAction.Notification)
+	notification, serviceErr := a.AgreementService.ActionAndNotification(r.Context(), notificationAction.Action, notificationAction.Notification)
 	if serviceErr != nil {
 		http_utils.ResponseError(w, serviceErr)
 		return
 	}
 
 	logger.Info("agreement controller ActionAndNotification about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
-	http_utils.ResponseJSON(w, http.StatusCreated, dto.Response{Message: notificationAction.Action + " completed and Notification created"})
+	http_utils.ResponseJSON(w, http.StatusCreated, notification)
 }
