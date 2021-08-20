@@ -23,16 +23,17 @@ type AgreementServiceInterface interface {
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	SetDeadline(context.Context, string, domain.Deadline) (*domain.Agreement, rest_errors.RestError)
 	DeleteDeadline(context.Context, string) (*domain.Agreement, rest_errors.RestError)
+	ActionAndNotification(context.Context, string, domain.Notification) rest_errors.RestError
 }
 
 type agreementService struct {
-	AgreementRepository repository.AgreementRepositoryInterface
+	AgreementRepository        repository.AgreementRepositoryInterface
 	AgreementArchiveRepository repository.AgreementArchiveRepositoryInterface
 }
 
 func NewAgreementService(agreementRepo repository.AgreementRepositoryInterface, agreementArchiveRepo repository.AgreementArchiveRepositoryInterface) AgreementServiceInterface {
 	return &agreementService{
-		AgreementRepository: agreementRepo,
+		AgreementRepository:        agreementRepo,
 		AgreementArchiveRepository: agreementArchiveRepo,
 	}
 }
@@ -74,7 +75,7 @@ func (a agreementService) DeleteAgreement(ctx context.Context, id string) (strin
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, id, "deleted", "agreement was deleted", nil)
 	if archiveErr == nil {
 		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
 		}()
 	}
 
@@ -113,7 +114,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 		agreement.Status = savedAgreement.Status
 	}
 	if agreement.Public == "" {
-		agreement.Public =savedAgreement.Public
+		agreement.Public = savedAgreement.Public
 	}
 	if len(agreement.Tags) == 0 {
 		agreement.Tags = savedAgreement.Tags
@@ -125,7 +126,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreement.Id, "modified", "agreement was modified", savedAgreement)
 	if archiveErr == nil {
 		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
 		}()
 	}
 
@@ -151,7 +152,7 @@ func (a agreementService) SearchAgreements(ctx context.Context, key string, val 
 	}
 
 	// Sanitize key + val
-	
+
 	logger.Info("agreement service SearchAgreements finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.SearchAgreements(ctx, key, val)
 }
@@ -165,7 +166,7 @@ func (a agreementService) AddUserToAgreement(ctx context.Context, agreementId st
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
 	if archiveErr == nil {
 		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
 		}()
 	}
 
@@ -182,7 +183,7 @@ func (a agreementService) RemoveUserFromAgreement(ctx context.Context, agreement
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
 	if archiveErr == nil {
 		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
 		}()
 	}
 
@@ -199,7 +200,7 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
 	if archiveErr == nil {
 		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
 		}()
 	}
 
@@ -228,7 +229,7 @@ func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
 	if archiveErr == nil {
 		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx,*agreementArchive)
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
 		}()
 	}
 
@@ -250,11 +251,46 @@ func archiveAgreementHelper(ctx context.Context, agreementRepo repository.Agreem
 	currTime := time.Now().UTC().Unix()
 	agreement.LastUpdateDateTime = currTime
 	agreementArchive := domain.AgreementArchive{
-		Id: uuid.NewString(),
-		AgreementData: *agreement,
+		Id:             uuid.NewString(),
+		AgreementData:  *agreement,
 		CreateDateTime: currTime,
-		Info: info,
+		Info:           info,
 	}
 
 	return &agreementArchive, nil
+}
+
+func (a agreementService) ActionAndNotification(ctx context.Context, action string, notification domain.Notification) rest_errors.RestError {
+	logger.Info("agreement service ActionAndNotification start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize action string and notification instance
+
+	// Get appropriate inputs for repository
+	actionInputs := getActionAndNotificationInputs(action)
+	if actionInputs != nil {
+		return rest_errors.NewBadRequestError("action not supported")
+	}
+
+	logger.Info("agreement service ActionAndNotification finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.ActionAndNotification(ctx, actionInputs, notification)
+}
+
+func getActionAndNotificationInputs(action string) []string {
+	// Up to 2 Actions (for agreements), 2 inputs per action () - the data is passed via obj
+	res, ok := actionCodes[action]
+	if !ok {
+		goto INVALIDACTION
+	}
+
+	return res
+
+INVALIDACTION:
+	return nil
+}
+
+var actionCodes map[string][]string
+
+func init() {
+	actionCodes = map[string][]string{}
+
 }

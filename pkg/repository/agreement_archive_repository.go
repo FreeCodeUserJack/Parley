@@ -16,7 +16,7 @@ type AgreementArchiveRepositoryInterface interface {
 	ArchiveAgreement(context.Context, domain.AgreementArchive) (*domain.AgreementArchive, rest_errors.RestError)
 }
 
-type agreementArchiveRepository struct {}
+type agreementArchiveRepository struct{}
 
 func NewAgreementArchiveRepository() AgreementArchiveRepositoryInterface {
 	return &agreementArchiveRepository{}

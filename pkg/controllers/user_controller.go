@@ -3,15 +3,14 @@ package controllers
 import (
 	"net/http"
 
+	"github.com/FreeCodeUserJack/Parley/pkg/services"
 	"github.com/go-chi/chi"
 )
 
-var (
-	UsersController UsersControllerInterface
-)
-
-func init() {
-	UsersController = &usersResource{}
+func NewUserController(userService services.UserServiceInterface) UsersControllerInterface {
+	return &usersResource{
+		UserService: userService,
+	}
 }
 
 type UsersControllerInterface interface {
@@ -25,7 +24,9 @@ type UsersControllerInterface interface {
 	GetAgreements(w http.ResponseWriter, r *http.Request)
 }
 
-type usersResource struct{}
+type usersResource struct {
+	UserService services.UserServiceInterface
+}
 
 func (u usersResource) Routes() chi.Router {
 	router := chi.NewRouter()

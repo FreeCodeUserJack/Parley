@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
+	"github.com/FreeCodeUserJack/Parley/pkg/dto"
 	"github.com/FreeCodeUserJack/Parley/pkg/services"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/context_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/http_utils"
@@ -33,6 +34,8 @@ type AgreementControllerInterface interface {
 	RemoveUserFromAgreement(w http.ResponseWriter, r *http.Request)
 	SetDeadline(w http.ResponseWriter, r *http.Request)
 	DeleteDeadline(w http.ResponseWriter, r *http.Request)
+	SearchAgreements(w http.ResponseWriter, r *http.Request)
+	ActionAndNotification(w http.ResponseWriter, r *http.Request)
 }
 
 type agreementsResource struct {
@@ -44,6 +47,7 @@ func (a agreementsResource) Routes() chi.Router {
 
 	router.Post("/new", a.NewAgreement)
 	router.Get("/search", a.SearchAgreements)
+	router.Post("/actionAndNotification", a.ActionAndNotification)
 
 	router.Route("/{agreementId}", func(r chi.Router) {
 		r.Delete("/", a.DeleteAgreement)
@@ -110,7 +114,7 @@ func (a agreementsResource) DeleteAgreement(w http.ResponseWriter, r *http.Reque
 	}
 
 	logger.Info("agreement controller DeleteAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
-	http_utils.ResponseJSON(w, http.StatusOK, domain.Response{Message: "document deleted", Id: uuid})
+	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "document deleted", Id: uuid})
 }
 
 // pass in id via url param, then body containing fields that should be updated
@@ -227,7 +231,7 @@ func (a agreementsResource) AddUserToAgreement(w http.ResponseWriter, r *http.Re
 	}
 
 	logger.Info("agreement controller AddUserToAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
-	http_utils.ResponseJSON(w, http.StatusOK, domain.Response{Message: "Added friendId to agremeent", Id: returnedId})
+	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "Added friendId to agremeent", Id: returnedId})
 }
 
 func (a agreementsResource) RemoveUserFromAgreement(w http.ResponseWriter, r *http.Request) {
@@ -250,12 +254,12 @@ func (a agreementsResource) RemoveUserFromAgreement(w http.ResponseWriter, r *ht
 	}
 
 	logger.Info("agreement controller RemoveUserFromAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
-	http_utils.ResponseJSON(w, http.StatusOK, domain.Response{Message: "Removed friendId from agremeent", Id: returnedId})
+	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "Removed friendId from agremeent", Id: returnedId})
 }
 
 func (a agreementsResource) SetDeadline(w http.ResponseWriter, r *http.Request) {
 	logger.Info("agreement controller SetDeadline about to get agreementId", context_utils.GetTraceAndClientIds(r.Context())...)
-	
+
 	agreementId := chi.URLParam(r, "agreementId")
 
 	if agreementId == "" {
@@ -315,4 +319,35 @@ func (a agreementsResource) DeleteDeadline(w http.ResponseWriter, r *http.Reques
 
 	logger.Info("agreement controller DeleteDeadline about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
 	http_utils.ResponseJSON(w, http.StatusOK, returnedAgreement)
+}
+
+func (a agreementsResource) ActionAndNotification(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller ActionAndNotification about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		restErr := rest_errors.NewBadRequestError("missing req body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+	defer r.Body.Close()
+
+	var notificationAction dto.NotificationAction
+	jsonErr := json.Unmarshal(bodyBytes, &notificationAction)
+	if jsonErr != nil {
+		restErr := rest_errors.NewBadRequestError("invalid json body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+
+	serviceErr := a.AgreementService.ActionAndNotification(r.Context(), notificationAction.Action, notificationAction.Notification)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("agreement controller ActionAndNotification about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusCreated, dto.Response{Message: notificationAction.Action + " completed and Notification created"})
 }

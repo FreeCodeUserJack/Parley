@@ -19,6 +19,12 @@ var (
 )
 
 func StartApplication() {
+	// educational purposes
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("StartApplication panic caught: %v\n", r)
+		}
+	}()
 
 	logger.Info("app initilization started")
 
@@ -43,7 +49,7 @@ func StartApplication() {
 	router.Get("/api/v1/health", controllers.HealthCheck)
 
 	// setup Users repo/service and mount Users routes
-	router.Mount("/api/v1/users", controllers.UsersController.Routes())
+	router.Mount("/api/v1/users", controllers.NewUserController(services.NewUserService(repository.NewUserRepository())).Routes())
 
 	// setup Agreements repo/service and mount Agreements routes
 	agreementRepo := repository.NewAgreementRepository()
