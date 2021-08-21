@@ -333,8 +333,8 @@ func (a agreementsResource) ActionAndNotification(w http.ResponseWriter, r *http
 	}
 	defer r.Body.Close()
 
-	var notificationAction dto.NotificationAction
-	jsonErr := json.Unmarshal(bodyBytes, &notificationAction)
+	var notification domain.Notification
+	jsonErr := json.Unmarshal(bodyBytes, &notification)
 	if jsonErr != nil {
 		restErr := rest_errors.NewBadRequestError("invalid json body")
 		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
@@ -342,12 +342,12 @@ func (a agreementsResource) ActionAndNotification(w http.ResponseWriter, r *http
 		return
 	}
 
-	notification, serviceErr := a.AgreementService.ActionAndNotification(r.Context(), notificationAction.Action, notificationAction.Notification)
+	notificationRes, serviceErr := a.AgreementService.ActionAndNotification(r.Context(), notification)
 	if serviceErr != nil {
 		http_utils.ResponseError(w, serviceErr)
 		return
 	}
 
 	logger.Info("agreement controller ActionAndNotification about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
-	http_utils.ResponseJSON(w, http.StatusCreated, notification)
+	http_utils.ResponseJSON(w, http.StatusCreated, notificationRes)
 }

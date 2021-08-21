@@ -23,6 +23,7 @@ type Agreement struct {
 	Status                     string    `bson:"status" json:"status"`
 	Public                     string    `bson:"public" json:"public"`
 	Tags                       []string  `bson:"tags" json:"tags"`
+	Type                       string    `bson:"type" json:"type"`
 }
 
 func (a Agreement) MarshalJSON() ([]byte, error) {

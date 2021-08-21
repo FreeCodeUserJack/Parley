@@ -1,0 +1,14 @@
+Request
+{
+  "message": "join my agreement!",
+  "status": "new",
+  "user_id": "user_321",
+  "contact_id": "user_123",
+  "agreement_id": "7ac9d03e-751b-4122-8163-6006caacdc3a",
+  "contact_first_name": "John",
+  "agreement_title": "Labor Day Party",
+  "type": "requires_response",
+  "action": "invite"
+}
+
+Response

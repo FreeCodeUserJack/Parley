@@ -24,7 +24,7 @@ type AgreementServiceInterface interface {
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	SetDeadline(context.Context, string, domain.Deadline) (*domain.Agreement, rest_errors.RestError)
 	DeleteDeadline(context.Context, string) (*domain.Agreement, rest_errors.RestError)
-	ActionAndNotification(context.Context, string, domain.Notification) (*domain.Notification, rest_errors.RestError)
+	ActionAndNotification(context.Context, domain.Notification) (*domain.Notification, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -269,40 +269,53 @@ func archiveAgreementHelper(ctx context.Context, agreementRepo repository.Agreem
 	return &agreementArchive, nil
 }
 
-func (a agreementService) ActionAndNotification(ctx context.Context, action string, notification domain.Notification) (*domain.Notification, rest_errors.RestError) {
+func (a agreementService) ActionAndNotification(ctx context.Context, notification domain.Notification) (*domain.Notification, rest_errors.RestError) {
 	logger.Info("agreement service ActionAndNotification start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize action string and notification instance
 
+	// Archive Changes
+	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, notification.AgreementId, "modified", "agreement was modified", nil)
+	if archiveErr == nil {
+		go func() {
+			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+		}()
+	}
+
 	// Set uuid
 	notification.Id = uuid.NewString()
+	notification.CreateDateTime = time.Now().UTC()
+
+	fmt.Println(actionCodes[notification.Action], notification.Action, actionCodes["invite"])
 
 	// Get appropriate inputs for repository
-	actionInputs := getActionAndNotificationInputs(action)
-	if actionInputs != nil {
+	actionInputs := getActionAndNotificationInputs(notification.Action)
+	if actionInputs == nil {
 		return nil, rest_errors.NewBadRequestError("action not supported")
 	}
 
-	doneChan := make(chan int)
-	go func(c chan int) {
-		defer close(c)
-		a.AgreementRepository.ActionAndNotification(ctx, actionInputs, notification)
-		doneChan <- 1
-	}(doneChan)
+	notification.Title = fmt.Sprintf(actionInputs[0], notification.ContactFirstName, notification.AgreementTitle)
 
-	notificationResult, repoErr := a.NotificationRepository.SaveNotification(ctx, notification)
+	// doneChan := make(chan int)
+	// go func(c chan int) {
+	// 	defer close(c)
+	// 	a.AgreementRepository.ActionAndNotification(ctx, actionInputs, notification)
+	// 	doneChan <- 1
+	// }(doneChan)
 
-	select {
-	case done := <-doneChan:
-		logger.Info(fmt.Sprintf("notification created: %v, chan output: %d", notification, done), context_utils.GetTraceAndClientIds(ctx)...)
-	case <-time.After(5 * time.Second):
-		logger.Error("agreement service ActionAndNotification - couldn't save notification", fmt.Errorf("could not update agreement/user for notification: %v", notification), context_utils.GetTraceAndClientIds(ctx)...)
-		a.NotificationRepository.DeleteNotification(ctx, notification.Id) // if this fails then complete failure... - maybe put in Fatal Inconsistency DB
-		return nil, rest_errors.NewInternalServerError(fmt.Sprintf("could not ActionAndNotification for %v", notification), errors.New("database error"))
-	}
+	// notificationResult, repoErr := a.NotificationRepository.SaveNotification(ctx, notification)
+
+	// select {
+	// case done := <-doneChan:
+	// 	logger.Info(fmt.Sprintf("notification created: %v, chan output: %d", notification, done), context_utils.GetTraceAndClientIds(ctx)...)
+	// case <-time.After(5 * time.Second):
+	// 	logger.Error("agreement service ActionAndNotification - couldn't save notification", fmt.Errorf("could not update agreement/user for notification: %v", notification), context_utils.GetTraceAndClientIds(ctx)...)
+	// 	a.NotificationRepository.DeleteNotification(ctx, notification.Id) // if this fails then complete failure... - maybe put in Fatal Inconsistency DB
+	// 	return nil, rest_errors.NewInternalServerError(fmt.Sprintf("could not ActionAndNotification for %v", notification), errors.New("database error"))
+	// }
 
 	logger.Info("agreement service ActionAndNotification finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return notificationResult, repoErr
+	return a.AgreementRepository.ActionAndNotification(ctx, actionInputs[1:], notification)
 }
 
 func getActionAndNotificationInputs(action string) []string {
@@ -321,5 +334,24 @@ INVALIDACTION:
 var actionCodes map[string][]string
 
 func init() {
-	actionCodes = map[string][]string{}
+	actionCodes = map[string][]string{
+		"invite": {"%s invites you to agreement: %s", "$push", "invited_participants"},
+		// "uninvite": {"%s uninvites you to agreement: %s", "$pull", "invited_participants"},
+		"acceptInvite":     {"%s accepted your invite to agreement: %s", "$pull", "invited_participants", "$push", "participants"},
+		"declineInvite":    {"%s declined your invite to agreement: %s", "$pull", "invited_participants"},
+		"requestAgreement": {"%s requests you join agreement: %s", "$push", "requested_participants"},
+		// "unrequestAgreement": {"%s unrequested you join agreement: %s", "$pull", "requested_participants"},
+		"acceptRequest":  {"%s accepted your request to agreement: %s", "$pull", "requested_participants", "$push", "participants"},
+		"declineRequest": {"%s declined your request to agreement: %s", "$pull", "requested_participants"},
+		"remove":         {"%s requests to remove you from agreement: %s", "$push", "pending_removal_participants"},
+		// "unremove": {"%s unrequests to remove you from agreement: %s", "$pull", "pending_removal_participants"},
+		"acceptRemove":  {"%s accepts your removal request for agreement: %s", "$pull", "pending_removal_participants", "$pull", "participants"},
+		"declineRemove": {"%s declines your removal request for agreement: %s", "$pull", "pending_removal_participants"},
+		"leave":         {"%s wants to leave your agreement: %s", "$push", "pending_leave_participants"},
+		// "unleave": {"%s unwants to leave your to agreement: %s", "$pull", "pending_leave_participants"},
+		"acceptLeave":  {"%s accepts your request to leave agreement: %s", "$pull", "pending_leave_participants", "$pull", "participants"},
+		"declineLeave": {"%s declined your request to leave agreement: %s", "$pull", "pending_leave_participants"},
+	}
+
+	// fmt.Printf("%v\n", actionCodes)
 }

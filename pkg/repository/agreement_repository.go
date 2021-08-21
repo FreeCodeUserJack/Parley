@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/db"
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
@@ -14,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 )
 
 type AgreementRepositoryInterface interface {
@@ -351,6 +353,63 @@ func (a agreementRepository) DeleteDeadline(ctx context.Context, agreementId str
 func (a agreementRepository) ActionAndNotification(ctx context.Context, actionInputs []string, notification domain.Notification) (*domain.Notification, rest_errors.RestError) {
 	logger.Info("agreement repository ActionAndNotification start", context_utils.GetTraceAndClientIds(ctx)...)
 
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
+	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
+	notificationColl := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName, wcMajorityCollectionOpts)
+	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// insert notification
+		if _, err := notificationColl.InsertOne(ctx, notification); err != nil {
+			return nil, err
+		}
+
+		filter := bson.D{primitive.E{Key: "_id", Value: notification.AgreementId}}
+		updater1 := bson.D{primitive.E{Key: actionInputs[0], Value: bson.D{
+			primitive.E{Key: actionInputs[1], Value: notification.UserId},
+		}}}
+
+		_, err2 := agreementColl.UpdateOne(ctx, filter, updater1)
+		if err2 != nil {
+			return nil, err2
+		}
+
+		// update agreement slices
+		if len(actionInputs) > 2 {
+			updater2 := bson.D{primitive.E{Key: actionInputs[2], Value: bson.D{
+				primitive.E{Key: actionInputs[3], Value: notification.UserId},
+			}}}
+
+			_, err := agreementColl.UpdateOne(ctx, filter, updater2)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return nil, nil
+	}
+
+	session, err := client.StartSession()
+	if err != nil {
+		logger.Error("agreement repository ActionAndNoritication - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
+	}
+	defer session.EndSession(ctx)
+
+	result, err := session.WithTransaction(ctx, callback)
+	if err != nil {
+		logger.Error("agreement repository ActionAndNoritication - transaction failed", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+	}
+
+	fmt.Printf("%+v\n", result)
+
 	logger.Info("agreement repository ActionAndNotification finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return nil, nil
+	return &notification, nil
 }

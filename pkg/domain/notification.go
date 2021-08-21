@@ -8,15 +8,20 @@ import (
 type NotificationAlias Notification
 
 type Notification struct {
-	Id             string    `bson:"_id" json:"_id"`
-	Title          string    `bson:"title" json:"title"`
-	Message        string    `bson:"message" json:"message"`
-	CreateDateTime time.Time `bson:"create_datetime" json:"-"`
-	ReadDateTime   time.Time `bson:"read_datetime" json:"-"`
-	Status         string    `bson:"status" json:"status"`
-	UserId         string    `bson:"user_id" json:"user_id"`
-	ContactId      string    `bson:"contact_id" json:"contact_id"`
-	AgreementId    string    `bson:"agreement_id" json:"agreement_id"`
+	Id               string    `bson:"_id" json:"_id"`
+	Title            string    `bson:"title" json:"title"`
+	Message          string    `bson:"message" json:"message"`
+	CreateDateTime   time.Time `bson:"create_datetime" json:"-"`
+	ReadDateTime     time.Time `bson:"read_datetime" json:"-"`       // set when either dismissed or responded
+	Status           string    `bson:"status" json:"status"`         // new or old
+	UserId           string    `bson:"user_id" json:"user_id"`       // who the notification is for
+	ContactId        string    `bson:"contact_id" json:"contact_id"` // who is sending the notification
+	ContactFirstName string    `bson:"contact_first_name" json:"contact_first_name"`
+	AgreementId      string    `bson:"agreement_id" json:"agreement_id"`
+	AgreementTitle   string    `bson:"agreement_title" json:"agreement_title"`
+	Response         string    `bson:"response" json:"response"` // accept or decline
+	Type             string    `bson:"type" json:"type"`         // notify or requires_response
+	Action           string    `bson:"action" json:"action"`     // specific action e.g. invite
 }
 
 func (n Notification) MarshalJSON() ([]byte, error) {
