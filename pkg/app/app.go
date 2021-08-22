@@ -58,6 +58,9 @@ func StartApplication() {
 	agreementService := services.NewAgreementService(agreementRepo, agreementArchiveRepo, notificationRepo)
 	router.Mount("/api/v1/agreements", controllers.NewAgreementController(agreementService).Routes())
 
+	// setup Notification repo/service and mount Notifications routes
+	router.Mount("/api/v1/notifications", controllers.NewNotificationController(services.NewNotificationService(repository.NewNotificationRepository())).Routes())
+
 	logger.Info("app initilization finished")
 
 	if err := http.ListenAndServe(":"+port, router); err != nil {
