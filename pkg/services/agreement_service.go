@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"time"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
@@ -50,6 +51,7 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 	}
 
 	// Sanitize Data
+	agreement.Sanitize()
 
 	// Add UUID
 	uuid := uuid.NewString()
@@ -79,6 +81,7 @@ func (a agreementService) DeleteAgreement(ctx context.Context, id string) (strin
 	logger.Info("agreement service DeleteAgreement called", context_utils.GetTraceAndClientIds(ctx)...)
 
 	//Sanitize the id string
+	id = html.EscapeString(id)
 
 	// Archive Agreement
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, id, "deleted", "agreement was deleted", nil)
@@ -130,6 +133,11 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	}
 
 	agreement.CreatedBy = savedAgreement.CreatedBy
+	agreement.Participants = savedAgreement.Participants
+	agreement.InvitedParticipants = savedAgreement.InvitedParticipants
+	agreement.RequestedParticipants = savedAgreement.RequestedParticipants
+	agreement.PendingRemovalParticipants = savedAgreement.PendingRemovalParticipants
+	agreement.PendingLeaveParticipants = savedAgreement.PendingLeaveParticipants
 
 	// Archive Agreement Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreement.Id, "modified", "agreement was modified", savedAgreement)
@@ -147,6 +155,7 @@ func (a agreementService) GetAgreement(ctx context.Context, id string) (*domain.
 	logger.Info("agreement service GetAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize the id string
+	id = html.EscapeString(id)
 
 	logger.Info("agreement service GetAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.GetAgreement(ctx, id)
@@ -161,6 +170,8 @@ func (a agreementService) SearchAgreements(ctx context.Context, key string, val 
 	}
 
 	// Sanitize key + val
+	key = html.EscapeString(key)
+	val = html.EscapeString(val)
 
 	logger.Info("agreement service SearchAgreements finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.SearchAgreements(ctx, key, val)
@@ -170,6 +181,8 @@ func (a agreementService) AddUserToAgreement(ctx context.Context, agreementId st
 	logger.Info("agreement service AddUserToAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize agreementId and friendId
+	agreementId = html.EscapeString(agreementId)
+	friendId = html.EscapeString(friendId)
 
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
@@ -187,6 +200,8 @@ func (a agreementService) RemoveUserFromAgreement(ctx context.Context, agreement
 	logger.Info("agreement service RemoveUserFromAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize agreementId and friendId
+	agreementId = html.EscapeString(agreementId)
+	friendId = html.EscapeString(friendId)
 
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
@@ -204,6 +219,8 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 	logger.Info("agreement service SetDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize agreementId and deadline instance
+	agreementId = html.EscapeString(agreementId)
+	deadline.Sanitize()
 
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
@@ -233,6 +250,7 @@ func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string
 	logger.Info("agreement service DeleteDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize agreementId
+	agreementId = html.EscapeString(agreementId)
 
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
@@ -273,6 +291,18 @@ func (a agreementService) ActionAndNotification(ctx context.Context, notificatio
 	logger.Info("agreement service ActionAndNotification start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize action string and notification instance
+	notification.Sanitize()
+
+	// Check if accept invite/request/removal/leave
+	// if notification.Action == "acceptInvite" || notification.Action == "acceptRequest" || notification.Action == "acceptRemove" || notification.Action == "acceptLeave" {
+	// // need to check if there is new notification to un-do the invite/request/removal/leave ... complicated, b/c how to tell if notification is for this one or if it comes from previous invite/uninvite?
+	// }
+
+	// if notification.Action == "declineInvite" || notification.Action == "declineRequest" || notification.Action == "declineRemove" || notification.Action == "declineLeave" {
+
+	// }
+
+	// Check if uninvite/unrequest/unremove/unleave
 
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, notification.AgreementId, "modified", "agreement was modified", nil)
@@ -285,8 +315,6 @@ func (a agreementService) ActionAndNotification(ctx context.Context, notificatio
 	// Set uuid
 	notification.Id = uuid.NewString()
 	notification.CreateDateTime = time.Now().UTC()
-
-	fmt.Println(actionCodes[notification.Action], notification.Action, actionCodes["invite"])
 
 	// Get appropriate inputs for repository
 	actionInputs := getActionAndNotificationInputs(notification.Action)

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"html"
 	"time"
 )
 
@@ -59,4 +60,9 @@ func (d Deadline) Validate() bool {
 	}
 
 	return true
+}
+
+func (d *Deadline) Sanitize() {
+	d.Status = html.EscapeString(d.Status)
+	d.Note = html.EscapeString(d.Note)
 }

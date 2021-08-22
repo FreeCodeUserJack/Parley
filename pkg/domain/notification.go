@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"html"
 	"time"
 )
 
@@ -56,4 +57,19 @@ func (jn JSONNotification) Notification() Notification {
 	notification.CreateDateTime = jn.CreateDateTime.Time
 	notification.ReadDateTime = jn.ReadDateTime.Time
 	return notification
+}
+
+func (n *Notification) Sanitize() {
+	n.Id = html.EscapeString(n.Id)
+	n.Action = html.EscapeString(n.Action)
+	n.AgreementId = html.EscapeString(n.AgreementId)
+	n.AgreementTitle = html.EscapeString(n.AgreementTitle)
+	n.ContactFirstName = html.EscapeString(n.ContactFirstName)
+	n.ContactId = html.EscapeString(n.ContactId)
+	// n.Message = html.EscapeString(n.Message)
+	n.Response = html.EscapeString(n.Response)
+	n.Status = html.EscapeString(n.Status)
+	n.Title = html.EscapeString(n.Title)
+	n.Type = html.EscapeString(n.Type)
+	n.UserId = html.EscapeString(n.UserId)
 }

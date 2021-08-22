@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"html"
 	"time"
 )
 
@@ -90,4 +91,27 @@ func (t *Time) UnmarshalJSON(data []byte) error {
 	}
 	t.Time = time.Unix(i, 0).UTC()
 	return nil
+}
+
+// the slice array for participants of ActionAndNotification will never be passed as input and won't ever be set from json requests
+func (a *Agreement) Sanitize() {
+	a.Id = html.EscapeString(a.Id)
+	// a.Title = html.EscapeString(a.Title)
+	// a.Description = html.EscapeString(a.Description)
+	a.CreatedBy = html.EscapeString(a.CreatedBy)
+	a.AgreementDeadline.Sanitize()
+	a.Status = html.EscapeString(a.Status)
+	a.Public = html.EscapeString(a.Public)
+	a.Type = html.EscapeString(a.Type)
+	a.Tags = sanitizeStringSlice(a.Tags)
+}
+
+func sanitizeStringSlice(input []string) []string {
+	res := make([]string, len(input))
+
+	for i := 0; i < len(input); i++ {
+		res[i] = html.EscapeString(input[i])
+	}
+
+	return res
 }
