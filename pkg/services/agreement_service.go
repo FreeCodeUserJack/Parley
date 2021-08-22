@@ -132,6 +132,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 		agreement.Tags = savedAgreement.Tags
 	}
 
+	agreement.Type = savedAgreement.Type
 	agreement.CreatedBy = savedAgreement.CreatedBy
 	agreement.Participants = savedAgreement.Participants
 	agreement.InvitedParticipants = savedAgreement.InvitedParticipants
