@@ -1,0 +1,11 @@
+Request
+{
+  "first_name": "Jack",
+  "last_name": "Lagall",
+  "dob": 1234567890,
+  "email": "jacklagall@gmail.com",
+  "password": "pass123",
+  "role": "user",
+  "status": "active",
+  "public": "false"
+}

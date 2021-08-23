@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -79,7 +78,6 @@ func (a agreementsResource) NewAgreement(w http.ResponseWriter, r *http.Request)
 
 	jsonErr := json.Unmarshal(reqBody, &reqAgreement)
 	if jsonErr != nil {
-		fmt.Println(jsonErr)
 		restErr := rest_errors.NewBadRequestError("invalid json body")
 		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
 		http_utils.ResponseError(w, restErr)

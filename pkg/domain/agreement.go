@@ -104,6 +104,11 @@ func (a *Agreement) Sanitize() {
 	a.Public = html.EscapeString(a.Public)
 	a.Type = html.EscapeString(a.Type)
 	a.Tags = sanitizeStringSlice(a.Tags)
+	a.Participants = sanitizeStringSlice(a.Participants)
+	a.InvitedParticipants = sanitizeStringSlice(a.InvitedParticipants)
+	a.RequestedParticipants = sanitizeStringSlice(a.RequestedParticipants)
+	a.PendingRemovalParticipants = sanitizeStringSlice(a.PendingRemovalParticipants)
+	a.PendingLeaveParticipants = sanitizeStringSlice(a.PendingLeaveParticipants)
 }
 
 func sanitizeStringSlice(input []string) []string {
