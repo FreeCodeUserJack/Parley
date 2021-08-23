@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"html"
+	"strings"
 	"time"
 )
 
@@ -14,7 +15,7 @@ type User struct {
 	LastName                 string    `bson:"last_name" json:"last_name"`
 	DOB                      time.Time `bson:"dob" json:"-"`
 	Email                    string    `bson:"email" json:"email"`
-	Password                 string    `bson:"password" json:"-"`
+	Password                 string    `bson:"password" json:"password"`
 	Agreements               []string  `bson:"agreements" json:"agreements"`
 	InvitedAgreements        []string  `bson:"invited_agreements" json:"invited_agreements"`
 	RequestedAgreements      []string  `bson:"requested_agreements" json:"requested_agreements"`
@@ -31,6 +32,7 @@ type User struct {
 }
 
 func (u User) MarshalJSON() ([]byte, error) {
+	u.Password = ""
 	return json.Marshal(NewJSONUser(u))
 }
 
@@ -83,11 +85,11 @@ func (u User) Validate() bool {
 // Sanitize
 func (u *User) Sanitize() {
 	u.Id = html.EscapeString(u.Id)
-	u.FirstName = html.EscapeString(u.FirstName)
-	u.LastName = html.EscapeString(u.LastName)
-	u.Role = html.EscapeString(u.Role)
-	u.Status = html.EscapeString(u.Status)
-	u.Public = html.EscapeString(u.Public)
+	u.FirstName = strings.TrimSpace(html.EscapeString(u.FirstName))
+	u.LastName = strings.TrimSpace(html.EscapeString(u.LastName))
+	u.Role = strings.TrimSpace(html.EscapeString(u.Role))
+	u.Status = strings.TrimSpace(html.EscapeString(u.Status))
+	u.Public = strings.TrimSpace(html.EscapeString(u.Public))
 	u.Friends = sanitizeStringSlice(u.Friends)
 	u.PendingFriendRequests = sanitizeStringSlice(u.PendingFriendRequests)
 	u.Agreements = sanitizeStringSlice(u.Agreements)

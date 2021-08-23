@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"html"
+	"strings"
 	"time"
 )
 
@@ -61,15 +62,15 @@ func (jn JSONNotification) Notification() Notification {
 
 func (n *Notification) Sanitize() {
 	n.Id = html.EscapeString(n.Id)
-	n.Action = html.EscapeString(n.Action)
-	n.AgreementId = html.EscapeString(n.AgreementId)
-	n.AgreementTitle = html.EscapeString(n.AgreementTitle)
-	n.ContactFirstName = html.EscapeString(n.ContactFirstName)
-	n.ContactId = html.EscapeString(n.ContactId)
+	n.Action = strings.TrimSpace(html.EscapeString(n.Action))
+	n.AgreementId = strings.TrimSpace(html.EscapeString(n.AgreementId))
+	n.AgreementTitle = strings.TrimSpace(html.EscapeString(n.AgreementTitle))
+	n.ContactFirstName = strings.TrimSpace(html.EscapeString(n.ContactFirstName))
+	n.ContactId = strings.TrimSpace(html.EscapeString(n.ContactId))
 	// n.Message = html.EscapeString(n.Message)
-	n.Response = html.EscapeString(n.Response)
-	n.Status = html.EscapeString(n.Status)
-	n.Title = html.EscapeString(n.Title)
-	n.Type = html.EscapeString(n.Type)
-	n.UserId = html.EscapeString(n.UserId)
+	n.Response = strings.TrimSpace(html.EscapeString(n.Response))
+	n.Status = strings.TrimSpace(html.EscapeString(n.Status))
+	n.Title = strings.TrimSpace(html.EscapeString(n.Title))
+	n.Type = strings.TrimSpace(html.EscapeString(n.Type))
+	n.UserId = strings.TrimSpace(html.EscapeString(n.UserId))
 }

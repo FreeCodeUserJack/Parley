@@ -1,0 +1,7 @@
+Request
+{
+  "email": "jacklagall@gmail.com",
+  "password": "pass123"
+}
+
+Response

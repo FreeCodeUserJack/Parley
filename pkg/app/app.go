@@ -46,7 +46,11 @@ func StartApplication() {
 	router.Use(middleware.DefaultLogger)
 	router.Use(middleware.Recoverer)
 
+	// Health Check
 	router.Get("/api/v1/health", controllers.HealthCheck)
+
+	// Auth
+	router.Mount("/api/v1/auth", controllers.NewAuthController(services.NewAuthService(repository.NewAuthRepository(), repository.NewTokenRepository())).Routes())
 
 	// setup Users repo/service and mount Users routes
 	router.Mount("/api/v1/users", controllers.NewUserController(services.NewUserService(repository.NewUserRepository())).Routes())

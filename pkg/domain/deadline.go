@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"html"
+	"strings"
 	"time"
 )
 
@@ -63,6 +64,6 @@ func (d Deadline) Validate() bool {
 }
 
 func (d *Deadline) Sanitize() {
-	d.Status = html.EscapeString(d.Status)
+	d.Status = strings.TrimSpace(html.EscapeString(d.Status))
 	d.Note = html.EscapeString(d.Note)
 }

@@ -9,8 +9,8 @@ import (
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
 	"github.com/FreeCodeUserJack/Parley/pkg/repository"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/context_utils"
-	"github.com/FreeCodeUserJack/Parley/pkg/utils/crypto_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/rest_errors"
+	"github.com/FreeCodeUserJack/Parley/pkg/utils/security_utils"
 	"github.com/FreeCodeUserJack/Parley/tools/logger"
 	"github.com/google/uuid"
 )
@@ -41,7 +41,7 @@ func (u userService) NewUser(ctx context.Context, user domain.User) (*domain.Use
 	user.Sanitize()
 
 	// Hash the password
-	hash := crypto_utils.GetHash(ctx, user.Password)
+	hash := security_utils.GetHash(ctx, user.Password)
 	if hash == "" {
 		return nil, rest_errors.NewInternalServerError("error when trying to get hash password", errors.New("hash error"))
 	}
