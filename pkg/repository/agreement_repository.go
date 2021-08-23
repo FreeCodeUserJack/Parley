@@ -408,6 +408,7 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
 	}
 
+	// TODO
 	fmt.Printf("%+v\n", result)
 
 	logger.Info("agreement repository ActionAndNotification finish", context_utils.GetTraceAndClientIds(ctx)...)

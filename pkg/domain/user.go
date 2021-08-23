@@ -14,7 +14,7 @@ type User struct {
 	LastName                 string    `bson:"last_name" json:"last_name"`
 	DOB                      time.Time `bson:"dob" json:"-"`
 	Email                    string    `bson:"email" json:"email"`
-	Password                 string    `bson:"password" json:"password"`
+	Password                 string    `bson:"password" json:"-"`
 	Agreements               []string  `bson:"agreements" json:"agreements"`
 	InvitedAgreements        []string  `bson:"invited_agreements" json:"invited_agreements"`
 	RequestedAgreements      []string  `bson:"requested_agreements" json:"requested_agreements"`

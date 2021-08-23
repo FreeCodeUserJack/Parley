@@ -41,9 +41,12 @@ func (u userService) NewUser(ctx context.Context, user domain.User) (*domain.Use
 	user.Sanitize()
 
 	// Hash the password
-	if hashErr := crypto_utils.GetHash(ctx, user.Password); hashErr == "" {
+	hash := crypto_utils.GetHash(ctx, user.Password)
+	if hash == "" {
 		return nil, rest_errors.NewInternalServerError("error when trying to get hash password", errors.New("hash error"))
 	}
+
+	user.Password = hash
 
 	user.Id = uuid.NewString()
 
