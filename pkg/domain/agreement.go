@@ -26,6 +26,7 @@ type Agreement struct {
 	Public                     string    `bson:"public" json:"public"`
 	Tags                       []string  `bson:"tags" json:"tags"`
 	Type                       string    `bson:"type" json:"type"`
+	Location                   string    `bson:"location" json:"location"`
 }
 
 func (a Agreement) MarshalJSON() ([]byte, error) {
@@ -110,6 +111,7 @@ func (a *Agreement) Sanitize() {
 	a.RequestedParticipants = sanitizeStringSlice(a.RequestedParticipants)
 	a.PendingRemovalParticipants = sanitizeStringSlice(a.PendingRemovalParticipants)
 	a.PendingLeaveParticipants = sanitizeStringSlice(a.PendingLeaveParticipants)
+	a.Location = removeAngularBrackets(a.Location)
 }
 
 func sanitizeStringSlice(input []string) []string {
@@ -117,6 +119,20 @@ func sanitizeStringSlice(input []string) []string {
 
 	for i := 0; i < len(input); i++ {
 		res[i] = strings.TrimSpace(html.EscapeString(input[i]))
+	}
+
+	return res
+}
+
+func removeAngularBrackets(in string) string {
+	res := ""
+
+	for _, r := range in {
+		if r == '<' || r == '>' {
+			continue
+		} else {
+			res += string(r)
+		}
 	}
 
 	return res

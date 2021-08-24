@@ -131,6 +131,9 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	if len(agreement.Tags) == 0 {
 		agreement.Tags = savedAgreement.Tags
 	}
+	if agreement.Location == "" {
+		agreement.Location = savedAgreement.Location
+	}
 
 	agreement.Type = savedAgreement.Type
 	agreement.CreatedBy = savedAgreement.CreatedBy
