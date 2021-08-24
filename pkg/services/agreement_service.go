@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"strings"
 	"time"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
@@ -17,7 +18,7 @@ import (
 
 type AgreementServiceInterface interface {
 	NewAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
-	DeleteAgreement(context.Context, string) (string, rest_errors.RestError)
+	CloseAgreement(context.Context, string, string, string) (string, rest_errors.RestError)
 	UpdateAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
@@ -77,22 +78,29 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 	return a.AgreementRepository.NewAgreement(ctx, agreement)
 }
 
-func (a agreementService) DeleteAgreement(ctx context.Context, id string) (string, rest_errors.RestError) {
-	logger.Info("agreement service DeleteAgreement called", context_utils.GetTraceAndClientIds(ctx)...)
+func (a agreementService) CloseAgreement(ctx context.Context, id, queryKey, queryVal string) (string, rest_errors.RestError) {
+	logger.Info("agreement service CloseAgreement called", context_utils.GetTraceAndClientIds(ctx)...)
 
 	//Sanitize the id string
 	id = html.EscapeString(id)
+	queryKey = strings.TrimSpace(html.EscapeString(queryKey))
+	queryVal = strings.TrimSpace(html.EscapeString(queryVal))
+
+	if queryKey != "completion" || queryVal != "deleted" && queryVal != "retired" {
+		logger.Error(fmt.Sprintf("agreement service CloseAgreement - id, searchKey, searchVal improper: %s %s %s", id, queryKey, queryVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewBadRequestError("improper key/val: " + queryKey + "/" + queryVal)
+	}
 
 	// Archive Agreement
-	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, id, "deleted", "agreement was deleted", nil)
+	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, id, "deleted", "agreement was closed", nil)
 	if archiveErr == nil {
 		go func() {
 			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
 		}()
 	}
 
-	logger.Info("agreement service DeleteAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return a.AgreementRepository.DeleteAgreement(ctx, id)
+	logger.Info("agreement service CloseAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.CloseAgreement(ctx, id, queryVal)
 }
 
 func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.Agreement) (*domain.Agreement, rest_errors.RestError) {
@@ -278,7 +286,7 @@ func archiveAgreementHelper(ctx context.Context, agreementRepo repository.Agreem
 		}
 	}
 
-	agreement.Status = status
+	// agreement.Status = status
 	currTime := time.Now().UTC()
 	agreement.LastUpdateDateTime = currTime
 	agreementArchive := domain.AgreementArchive{

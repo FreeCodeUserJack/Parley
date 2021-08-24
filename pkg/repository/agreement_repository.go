@@ -20,7 +20,7 @@ import (
 
 type AgreementRepositoryInterface interface {
 	NewAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
-	DeleteAgreement(context.Context, string) (string, rest_errors.RestError)
+	CloseAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	UpdateAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
@@ -59,10 +59,15 @@ func (a agreementRepository) NewAgreement(ctx context.Context, agreement domain.
 	return &agreement, nil
 }
 
-func (a agreementRepository) DeleteAgreement(ctx context.Context, uuid string) (string, rest_errors.RestError) {
-	logger.Info("agreement repository DeleteAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
+func (a agreementRepository) CloseAgreement(ctx context.Context, uuid string, completionReason string) (string, rest_errors.RestError) {
+	logger.Info("agreement repository CloseAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	filter := bson.D{primitive.E{Key: "_id", Value: uuid}}
+
+	updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
+		primitive.E{Key: "status", Value: completionReason},
+	}}}
+
 	client, mongoErr := db.GetMongoClient()
 	if mongoErr != nil {
 		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
@@ -71,16 +76,16 @@ func (a agreementRepository) DeleteAgreement(ctx context.Context, uuid string) (
 
 	collection := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName)
 
-	res, dbErr := collection.DeleteOne(ctx, filter)
+	res, dbErr := collection.UpdateOne(ctx, filter, updater)
 	if dbErr != nil {
-		logger.Error("agreement repository DeleteAgreement db error", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		logger.Error("agreement repository CloseAgreement db error", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return "", rest_errors.NewInternalServerError("error when trying to delete doc with id: "+uuid, errors.New("database error"))
-	} else if res.DeletedCount == 0 {
-		logger.Error("agreement repository DeleteAgreement no doc found", errors.New("no doc with id: "+uuid+" found"), context_utils.GetTraceAndClientIds(ctx)...)
+	} else if res.MatchedCount == 0 {
+		logger.Error("agreement repository CloseAgreement no doc found", errors.New("no doc with id: "+uuid+" found"), context_utils.GetTraceAndClientIds(ctx)...)
 		return "", rest_errors.NewNotFoundError("doc with id: " + uuid + " not found")
 	}
 
-	logger.Info("agreement repository DeleteAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
+	logger.Info("agreement repository CloseAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return uuid, nil
 }
 

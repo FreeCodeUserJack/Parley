@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -26,7 +27,7 @@ func NewAgreementController(service services.AgreementServiceInterface) Agreemen
 type AgreementControllerInterface interface {
 	Routes() chi.Router
 	NewAgreement(w http.ResponseWriter, r *http.Request)
-	DeleteAgreement(w http.ResponseWriter, r *http.Request)
+	CloseAgreement(w http.ResponseWriter, r *http.Request)
 	UpdateAgreement(w http.ResponseWriter, r *http.Request)
 	GetAgreement(w http.ResponseWriter, r *http.Request)
 	AddUserToAgreement(w http.ResponseWriter, r *http.Request)
@@ -49,7 +50,7 @@ func (a agreementsResource) Routes() chi.Router {
 	router.Post("/actionAndNotification", a.ActionAndNotification)
 
 	router.Route("/{agreementId}", func(r chi.Router) {
-		r.Delete("/", a.DeleteAgreement)
+		r.Delete("/", a.CloseAgreement)
 		r.Put("/", a.UpdateAgreement)
 		r.Get("/", a.GetAgreement)
 		r.Post("/friend/{friendId}", a.AddUserToAgreement)
@@ -94,8 +95,8 @@ func (a agreementsResource) NewAgreement(w http.ResponseWriter, r *http.Request)
 	http_utils.ResponseJSON(w, http.StatusCreated, result)
 }
 
-func (a agreementsResource) DeleteAgreement(w http.ResponseWriter, r *http.Request) {
-	logger.Info("agreement controller DeleteAgreement reading url id", context_utils.GetTraceAndClientIds(r.Context())...)
+func (a agreementsResource) CloseAgreement(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller CloseAgreement reading url id", context_utils.GetTraceAndClientIds(r.Context())...)
 	agreementId := chi.URLParam(r, "agreementId")
 
 	if agreementId == "" {
@@ -105,13 +106,32 @@ func (a agreementsResource) DeleteAgreement(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	uuid, err := a.AgreementService.DeleteAgreement(r.Context(), agreementId)
+	logger.Info("agreement controller CloseAgreement getting query param", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	if !strings.Contains(r.URL.String(), "?") || !strings.Contains(r.URL.String(), "=") {
+		logger.Error("agreement controller CloseAgreement - no query params: "+r.URL.String(), errors.New("missing query"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("missing query params"))
+		return
+	}
+
+	queryParams := strings.Split(strings.Split(r.URL.String(), "?")[1], "=")
+
+	if len(queryParams) != 2 {
+		logger.Error("agreement controller CloseAgreement - expected 1 query param: "+r.URL.String(), errors.New("# query param mismatched"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("incorrect # of query params"))
+		return
+	}
+
+	queryKey := queryParams[0]
+	queryVal := queryParams[1]
+
+	uuid, err := a.AgreementService.CloseAgreement(r.Context(), agreementId, queryKey, queryVal)
 	if err != nil {
 		http_utils.ResponseError(w, err)
 		return
 	}
 
-	logger.Info("agreement controller DeleteAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	logger.Info("agreement controller CloseAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
 	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "document deleted", Id: uuid})
 }
 
