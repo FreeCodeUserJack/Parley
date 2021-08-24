@@ -16,6 +16,7 @@ import (
 
 type NotificationServiceInterface interface {
 	GetUserNotifications(context.Context, string, string, string) ([]domain.Notification, rest_errors.RestError)
+	MarkNotificationRead(context.Context, string) (string, rest_errors.RestError)
 }
 
 type notificationService struct {
@@ -43,4 +44,14 @@ func (n notificationService) GetUserNotifications(ctx context.Context, userId, q
 
 	logger.Info("notification service GetUserNotifications finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return n.NotificationRepository.GetUserNotifications(ctx, userId, queryVal)
+}
+
+func (n notificationService) MarkNotificationRead(ctx context.Context, id string) (string, rest_errors.RestError) {
+	logger.Info("notification service MarkNotificationRead start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize id
+	id = strings.TrimSpace(html.EscapeString(id))
+
+	logger.Info("notification service MarkNotificationRead finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return n.NotificationRepository.MarkNotificationRead(ctx, id)
 }

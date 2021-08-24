@@ -17,6 +17,7 @@ type NotificationRepositoryInterface interface {
 	SaveNotification(context.Context, domain.Notification) (*domain.Notification, rest_errors.RestError)
 	DeleteNotification(context.Context, string) rest_errors.RestError
 	GetUserNotifications(context.Context, string, string) ([]domain.Notification, rest_errors.RestError)
+	MarkNotificationRead(context.Context, string) (string, rest_errors.RestError)
 }
 
 type notificationRepository struct{}
@@ -115,4 +116,35 @@ func (n notificationRepository) GetUserNotifications(ctx context.Context, userId
 
 	logger.Info("notification repository GetUserNotification finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return notifications, nil
+}
+
+func (n notificationRepository) MarkNotificationRead(ctx context.Context, id string) (string, rest_errors.RestError) {
+	logger.Info("notification repository MarkNotificationRead start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	filter := bson.D{primitive.E{Key: "_id", Value: id}}
+
+	updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
+		primitive.E{Key: "status", Value: "old"},
+	}}}
+
+	collection := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName)
+
+	_, dbErr := collection.UpdateOne(ctx, filter, updater)
+	if dbErr != nil {
+		if dbErr.Error() == "mongo: no documents in result" {
+			logger.Error("notification repository MarkNotificationRead no doc found", errors.New("no doc with id: "+id+" found"), context_utils.GetTraceAndClientIds(ctx)...)
+			return "", rest_errors.NewBadRequestError("doc with id: " + id + " not found")
+		}
+		logger.Error("notification repository MarkNotificationRead db error", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("error when trying to update doc with id: "+id, errors.New("database error"))
+	}
+
+	logger.Info("notification repository MarkNotificationRead finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return id, nil
 }
