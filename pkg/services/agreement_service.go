@@ -86,7 +86,7 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, queryKey, quer
 	queryKey = strings.TrimSpace(html.EscapeString(queryKey))
 	queryVal = strings.TrimSpace(html.EscapeString(queryVal))
 
-	if queryKey != "completion" || queryVal != "deleted" && queryVal != "retired" {
+	if queryKey != "completion" || queryVal != "finished" && queryVal != "retired" {
 		logger.Error(fmt.Sprintf("agreement service CloseAgreement - id, searchKey, searchVal improper: %s %s %s", id, queryKey, queryVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
 		return "", rest_errors.NewBadRequestError("improper key/val: " + queryKey + "/" + queryVal)
 	}
