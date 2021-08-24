@@ -16,7 +16,7 @@ import (
 type NotificationRepositoryInterface interface {
 	SaveNotification(context.Context, domain.Notification) (*domain.Notification, rest_errors.RestError)
 	DeleteNotification(context.Context, string) rest_errors.RestError
-	GetUserNotifications(context.Context, string) ([]domain.Notification, rest_errors.RestError)
+	GetUserNotifications(context.Context, string, string) ([]domain.Notification, rest_errors.RestError)
 }
 
 type notificationRepository struct{}
@@ -71,10 +71,16 @@ func (n notificationRepository) DeleteNotification(ctx context.Context, id strin
 	return nil
 }
 
-func (n notificationRepository) GetUserNotifications(ctx context.Context, userId string) ([]domain.Notification, rest_errors.RestError) {
+func (n notificationRepository) GetUserNotifications(ctx context.Context, userId, statusVal string) ([]domain.Notification, rest_errors.RestError) {
 	logger.Info("notification repository GetUserNotification start", context_utils.GetTraceAndClientIds(ctx)...)
 
-	filter := bson.D{primitive.E{Key: "user_id", Value: userId}}
+	var filter bson.D
+
+	if statusVal == "old" || statusVal == "new" {
+		filter = bson.D{primitive.E{Key: "user_id", Value: userId}, primitive.E{Key: "status", Value: statusVal}}
+	} else {
+		filter = bson.D{primitive.E{Key: "user_id", Value: userId}}
+	}
 
 	var notifications []domain.Notification
 

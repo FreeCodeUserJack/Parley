@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"html"
+	"strings"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
 	"github.com/FreeCodeUserJack/Parley/pkg/repository"
@@ -12,7 +15,7 @@ import (
 )
 
 type NotificationServiceInterface interface {
-	GetUserNotifications(context.Context, string) ([]domain.Notification, rest_errors.RestError)
+	GetUserNotifications(context.Context, string, string, string) ([]domain.Notification, rest_errors.RestError)
 }
 
 type notificationService struct {
@@ -25,12 +28,19 @@ func NewNotificationService(notificationRepo repository.NotificationRepositoryIn
 	}
 }
 
-func (n notificationService) GetUserNotifications(ctx context.Context, userId string) ([]domain.Notification, rest_errors.RestError) {
+func (n notificationService) GetUserNotifications(ctx context.Context, userId, queryKey, queryVal string) ([]domain.Notification, rest_errors.RestError) {
 	logger.Info("notification service GetUserNotifications start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize userId
-	userId = html.EscapeString(userId)
+	userId = strings.TrimSpace(html.EscapeString(userId))
+	queryKey = strings.TrimSpace(html.EscapeString(queryKey))
+	queryVal = strings.TrimSpace(html.EscapeString(queryVal))
+
+	if userId == "" || queryKey != "status" || queryVal != "old" && queryVal != "new" && queryVal != "all" {
+		logger.Error(fmt.Sprintf("notiication service CloseAgreement - id, searchKey, searchVal improper: %s %s %s", userId, queryKey, queryVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("improper key/val: " + queryKey + "/" + queryVal)
+	}
 
 	logger.Info("notification service GetUserNotifications finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return n.NotificationRepository.GetUserNotifications(ctx, userId)
+	return n.NotificationRepository.GetUserNotifications(ctx, userId, queryVal)
 }
