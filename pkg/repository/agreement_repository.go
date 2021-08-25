@@ -21,6 +21,7 @@ import (
 type AgreementRepositoryInterface interface {
 	NewAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
 	CloseAgreement(context.Context, string, string) (string, rest_errors.RestError)
+	CloseAgreementDirected(context.Context, string, string, []domain.Notification) (string, rest_errors.RestError)
 	UpdateAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
@@ -79,13 +80,77 @@ func (a agreementRepository) CloseAgreement(ctx context.Context, uuid string, co
 	res, dbErr := collection.UpdateOne(ctx, filter, updater)
 	if dbErr != nil {
 		logger.Error("agreement repository CloseAgreement db error", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
-		return "", rest_errors.NewInternalServerError("error when trying to delete doc with id: "+uuid, errors.New("database error"))
+		return "", rest_errors.NewInternalServerError("error when trying to close doc with id: "+uuid, errors.New("database error"))
 	} else if res.MatchedCount == 0 {
 		logger.Error("agreement repository CloseAgreement no doc found", errors.New("no doc with id: "+uuid+" found"), context_utils.GetTraceAndClientIds(ctx)...)
 		return "", rest_errors.NewNotFoundError("doc with id: " + uuid + " not found")
 	}
 
 	logger.Info("agreement repository CloseAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return uuid, nil
+}
+
+func (a agreementRepository) CloseAgreementDirected(ctx context.Context, uuid string, completionReason string, notifications []domain.Notification) (string, rest_errors.RestError) {
+	logger.Info("agreement repository CloseAgreementDirected start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
+	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
+	notificationColl := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName, wcMajorityCollectionOpts)
+	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// Update Agreement
+		filter := bson.D{primitive.E{Key: "_id", Value: uuid}}
+
+		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
+			primitive.E{Key: "status", Value: completionReason},
+		}}}
+
+		res1, err1 := agreementColl.UpdateOne(sessCtx, filter, updater)
+		if err1 != nil {
+			logger.Error("agreement repository CloseAgreementDirected db error", err1, context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewInternalServerError("error when trying to close doc with id: "+uuid, errors.New("database error"))
+		}
+
+		if res1.MatchedCount == 0 {
+			logger.Error("agreement repository CloseAgreementDirected no doc found", errors.New("no doc with id: "+uuid+" found"), context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewNotFoundError("doc with id: " + uuid + " not found")
+		}
+
+		// Insert Notifications
+		inserts := make([]interface{}, len(notifications))
+		for i := range notifications {
+			inserts[i] = notifications[i]
+		}
+		_, insertErr := notificationColl.InsertMany(sessCtx, inserts)
+		if insertErr != nil {
+			logger.Error("agreement repository CloseAgreementDirected transaction to insert notifications failed", insertErr, context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewInternalServerError("could not insert notifications", errors.New("database error"))
+		}
+
+		return nil, nil
+	}
+
+	session, err := client.StartSession()
+	if err != nil {
+		logger.Error("agreement repository CloseAgreementDirected - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
+	}
+	defer session.EndSession(ctx)
+
+	_, transactionErr := session.WithTransaction(ctx, callback)
+	if transactionErr != nil {
+		logger.Error("agreement repository CloseAgreementDirected - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+	}
+
+	logger.Info("agreement repository CloseAgreementDirected finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return uuid, nil
 }
 
@@ -371,7 +436,7 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 
 	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
 		// insert notification
-		if _, err := notificationColl.InsertOne(ctx, notification); err != nil {
+		if _, err := notificationColl.InsertOne(sessCtx, notification); err != nil {
 			return nil, err
 		}
 
@@ -380,7 +445,7 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 			primitive.E{Key: actionInputs[1], Value: notification.UserId},
 		}}}
 
-		_, err2 := agreementColl.UpdateOne(ctx, filter, updater1)
+		_, err2 := agreementColl.UpdateOne(sessCtx, filter, updater1)
 		if err2 != nil {
 			return nil, err2
 		}
@@ -391,7 +456,7 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 				primitive.E{Key: actionInputs[3], Value: notification.UserId},
 			}}}
 
-			_, err := agreementColl.UpdateOne(ctx, filter, updater2)
+			_, err := agreementColl.UpdateOne(sessCtx, filter, updater2)
 			if err != nil {
 				return nil, err
 			}
@@ -407,14 +472,13 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 	}
 	defer session.EndSession(ctx)
 
-	result, err := session.WithTransaction(ctx, callback)
+	_, err = session.WithTransaction(ctx, callback)
 	if err != nil {
 		logger.Error("agreement repository ActionAndNoritication - transaction failed", err, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
 	}
 
-	// TODO
-	fmt.Printf("%+v\n", result)
+	// fmt.Printf("%+v\n", result)
 
 	logger.Info("agreement repository ActionAndNotification finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return &notification, nil

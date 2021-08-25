@@ -18,7 +18,7 @@ import (
 
 type AgreementServiceInterface interface {
 	NewAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
-	CloseAgreement(context.Context, string, string, string) (string, rest_errors.RestError)
+	CloseAgreement(context.Context, string, string, string, string, string) (string, rest_errors.RestError)
 	UpdateAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
@@ -78,17 +78,37 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 	return a.AgreementRepository.NewAgreement(ctx, agreement)
 }
 
-func (a agreementService) CloseAgreement(ctx context.Context, id, queryKey, queryVal string) (string, rest_errors.RestError) {
+func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey, completionVal, typeKey, typeVal string) (string, rest_errors.RestError) {
 	logger.Info("agreement service CloseAgreement called", context_utils.GetTraceAndClientIds(ctx)...)
 
 	//Sanitize the id string
 	id = html.EscapeString(id)
-	queryKey = strings.TrimSpace(html.EscapeString(queryKey))
-	queryVal = strings.TrimSpace(html.EscapeString(queryVal))
+	completionKey = strings.TrimSpace(html.EscapeString(completionKey))
+	completionVal = strings.TrimSpace(html.EscapeString(completionVal))
+	typeKey = strings.TrimSpace(html.EscapeString(typeKey))
+	typeVal = strings.TrimSpace(html.EscapeString(typeVal))
 
-	if queryKey != "completion" || queryVal != "finished" && queryVal != "retired" {
-		logger.Error(fmt.Sprintf("agreement service CloseAgreement - id, searchKey, searchVal improper: %s %s %s", id, queryKey, queryVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
-		return "", rest_errors.NewBadRequestError("improper key/val: " + queryKey + "/" + queryVal)
+	if completionKey != "completion" || completionVal != "finished" && completionVal != "retired" {
+		logger.Error(fmt.Sprintf("agreement service CloseAgreement - improper completion key/val: %s %s %s", id, completionKey, completionVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewBadRequestError("improper completion key/val: " + completionKey + "/" + completionVal)
+	}
+
+	if typeKey != "type" || typeVal != "solo" && typeVal != "directed" && typeVal != "collborative" {
+		logger.Error(fmt.Sprintf("agreement service CloseAgreement - improper type key/val: %s %s %s", id, typeKey, typeVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewBadRequestError("improper type key/val: " + typeKey + "/" + typeVal)
+	}
+
+	// Get current agreement
+	agreement, getErr := a.AgreementRepository.GetAgreement(ctx, id)
+	if getErr != nil {
+		logger.Error("agreement service CloseAgreement - could not get agreement: "+id, getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("error trying to retrieve agreement: "+id, errors.New("database error"))
+	}
+
+	// Check if agreement already closed
+	if agreement.Status == "retired" || agreement.Status == "finished" {
+		logger.Error(fmt.Sprintf("agreement service CloseAgreement - agreement already closed: %v", agreement), getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewBadRequestError("agreement already closed: " + id)
 	}
 
 	// Archive Agreement
@@ -100,7 +120,36 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, queryKey, quer
 	}
 
 	logger.Info("agreement service CloseAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return a.AgreementRepository.CloseAgreement(ctx, id, queryVal)
+	if typeVal == "solo" {
+		return a.AgreementRepository.CloseAgreement(ctx, id, completionVal)
+	} else if typeVal == "directed" {
+		notifications := make([]domain.Notification, 0)
+		for i := 0; i < len(agreement.Participants); i++ {
+			if agreement.Participants[i] == agreement.CreatedBy {
+				continue
+			}
+
+			notifications = append(notifications, domain.Notification{
+				Id:               uuid.NewString(),
+				Title:            fmt.Sprintf("%s updated '%s' agreement", agreement.CreatorName, agreement.Title),
+				Message:          "",
+				CreateDateTime:   time.Now().UTC(),
+				Status:           "new",
+				UserId:           agreement.Participants[i],
+				ContactId:        agreement.CreatedBy,
+				ContactFirstName: agreement.CreatorName,
+				AgreementId:      agreement.Id,
+				AgreementTitle:   agreement.Title,
+				Response:         "",
+				Type:             "notifyUpdate",
+				Action:           "update",
+			})
+		}
+		return a.AgreementRepository.CloseAgreementDirected(ctx, id, completionVal, notifications)
+	} else {
+		// TODO for collborative notification / put in awaiting collaboration + new agreement state
+		return "", nil
+	}
 }
 
 func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.Agreement) (*domain.Agreement, rest_errors.RestError) {
@@ -118,6 +167,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 		return nil, getErr
 	}
 
+	// Check which fields need to be set
 	if agreement.Title == "" {
 		agreement.Title = savedAgreement.Title
 	}
@@ -145,6 +195,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 
 	agreement.Type = savedAgreement.Type
 	agreement.CreatedBy = savedAgreement.CreatedBy
+	agreement.CreatorName = savedAgreement.CreatorName
 	agreement.Participants = savedAgreement.Participants
 	agreement.InvitedParticipants = savedAgreement.InvitedParticipants
 	agreement.RequestedParticipants = savedAgreement.RequestedParticipants

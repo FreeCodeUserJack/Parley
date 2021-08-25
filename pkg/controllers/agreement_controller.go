@@ -3,6 +3,7 @@ package controllers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -108,24 +109,35 @@ func (a agreementsResource) CloseAgreement(w http.ResponseWriter, r *http.Reques
 
 	logger.Info("agreement controller CloseAgreement getting query param", context_utils.GetTraceAndClientIds(r.Context())...)
 
-	if !strings.Contains(r.URL.String(), "?") || !strings.Contains(r.URL.String(), "=") {
+	if !strings.Contains(r.URL.String(), "?") || !strings.Contains(r.URL.String(), "=") || !strings.Contains(r.URL.String(), "&") {
 		logger.Error("agreement controller CloseAgreement - no query params: "+r.URL.String(), errors.New("missing query"), context_utils.GetTraceAndClientIds(r.Context())...)
 		http_utils.ResponseError(w, rest_errors.NewBadRequestError("missing query params"))
 		return
 	}
 
-	queryParams := strings.Split(strings.Split(r.URL.String(), "?")[1], "=")
+	querySplit := strings.Split(strings.Split(r.URL.String(), "?")[1], "&")
 
-	if len(queryParams) != 2 {
-		logger.Error("agreement controller CloseAgreement - expected 1 query param: "+r.URL.String(), errors.New("# query param mismatched"), context_utils.GetTraceAndClientIds(r.Context())...)
+	queryParams := []string{
+		strings.Split(querySplit[0], "=")[0],
+		strings.Split(querySplit[0], "=")[1],
+		strings.Split(querySplit[1], "=")[0],
+		strings.Split(querySplit[1], "=")[1],
+	}
+
+	fmt.Println(queryParams, len(queryParams))
+
+	if len(queryParams) != 4 {
+		logger.Error("agreement controller CloseAgreement - expected 2 query params: "+r.URL.String(), errors.New("# query param mismatched"), context_utils.GetTraceAndClientIds(r.Context())...)
 		http_utils.ResponseError(w, rest_errors.NewBadRequestError("incorrect # of query params"))
 		return
 	}
 
-	queryKey := queryParams[0]
-	queryVal := queryParams[1]
+	completionKey := queryParams[0]
+	completionVal := queryParams[1]
+	typeKey := queryParams[2]
+	typeVal := queryParams[3]
 
-	uuid, err := a.AgreementService.CloseAgreement(r.Context(), agreementId, queryKey, queryVal)
+	uuid, err := a.AgreementService.CloseAgreement(r.Context(), agreementId, completionKey, completionVal, typeKey, typeVal)
 	if err != nil {
 		http_utils.ResponseError(w, err)
 		return
@@ -369,3 +381,13 @@ func (a agreementsResource) ActionAndNotification(w http.ResponseWriter, r *http
 	logger.Info("agreement controller ActionAndNotification about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
 	http_utils.ResponseJSON(w, http.StatusCreated, notificationRes)
 }
+
+// func concatString(input []string) string {
+// 	res := ""
+
+// 	for _, str := range input {
+// 		res = res + str
+// 	}
+
+// 	return res
+// }

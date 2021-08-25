@@ -14,6 +14,7 @@ type Agreement struct {
 	Title                      string    `bson:"title" json:"title"`
 	Description                string    `bson:"description" json:"description"`
 	CreatedBy                  string    `bson:"created_by" json:"created_by"`
+	CreatorName                string    `bson:"creator_name" json:"creator_name"`
 	Participants               []string  `bson:"participants" json:"participants"`
 	InvitedParticipants        []string  `bson:"invited_participants" json:"invited_participants"`
 	RequestedParticipants      []string  `bson:"requested_participants" json:"requested_participants"`
@@ -101,6 +102,7 @@ func (a *Agreement) Sanitize() {
 	// a.Title = html.EscapeString(a.Title)
 	// a.Description = html.EscapeString(a.Description)
 	a.CreatedBy = strings.TrimSpace(html.EscapeString(a.CreatedBy))
+	a.CreatorName = strings.TrimSpace(html.EscapeString(a.CreatorName))
 	a.AgreementDeadline.Sanitize()
 	a.Status = strings.TrimSpace(html.EscapeString(a.Status))
 	a.Public = strings.TrimSpace(html.EscapeString(a.Public))

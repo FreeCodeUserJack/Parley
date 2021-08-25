@@ -3,6 +3,7 @@ Request
   "title": "Labor Day Party",
   "description": "We're going to have a party for Labor Day at my house!",
   "created_by": "user_123",
+  "creator_name": "Jack",
   "participants": ["user_123"],
   "agreement_deadline": {
     "deadline_datetime": 1629080646,
