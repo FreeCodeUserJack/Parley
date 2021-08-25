@@ -315,6 +315,25 @@ func (a agreementsResource) SetDeadline(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	logger.Info("agreement controller SetDeadline about to read query params", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	if !strings.Contains(r.URL.String(), "?") || !strings.Contains(r.URL.String(), "=") {
+		logger.Error("agreement controller SetDeadline - no query params: "+r.URL.String(), errors.New("missing query"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("missing query params"))
+		return
+	}
+
+	queryParams := strings.Split(strings.Split(r.URL.String(), "?")[1], "=")
+
+	if len(queryParams) != 2 {
+		logger.Error("agreement controller SetDeadline - expected 1 query param: "+r.URL.String(), errors.New("# query param mismatched"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("incorrect # of query params"))
+		return
+	}
+
+	typeKey := queryParams[0]
+	typeVal := queryParams[1]
+
 	logger.Info("agreement controller SetDeadline about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
 
 	reqBytes, err := ioutil.ReadAll(r.Body)
@@ -336,7 +355,7 @@ func (a agreementsResource) SetDeadline(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	result, serviceErr := a.AgreementService.SetDeadline(r.Context(), agreementId, reqDeadline)
+	result, serviceErr := a.AgreementService.SetDeadline(r.Context(), agreementId, reqDeadline, typeKey, typeVal)
 	if serviceErr != nil {
 		http_utils.ResponseError(w, serviceErr)
 		return

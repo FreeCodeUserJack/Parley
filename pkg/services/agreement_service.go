@@ -24,7 +24,7 @@ type AgreementServiceInterface interface {
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
-	SetDeadline(context.Context, string, domain.Deadline) (*domain.Agreement, rest_errors.RestError)
+	SetDeadline(context.Context, string, domain.Deadline, string, string) (*domain.Agreement, rest_errors.RestError)
 	DeleteDeadline(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	ActionAndNotification(context.Context, domain.Notification) (*domain.Notification, rest_errors.RestError)
 }
@@ -141,7 +141,7 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey,
 				AgreementId:      agreement.Id,
 				AgreementTitle:   agreement.Title,
 				Response:         "",
-				Type:             "notifyUpdate",
+				Type:             "notifyFinish",
 				Action:           "close",
 			})
 		}
@@ -315,12 +315,25 @@ func (a agreementService) RemoveUserFromAgreement(ctx context.Context, agreement
 	return a.AgreementRepository.RemoveUserFromAgreement(ctx, agreementId, friendId)
 }
 
-func (a agreementService) SetDeadline(ctx context.Context, agreementId string, deadline domain.Deadline) (*domain.Agreement, rest_errors.RestError) {
+func (a agreementService) SetDeadline(ctx context.Context, agreementId string, deadline domain.Deadline, typeKey, typeVal string) (*domain.Agreement, rest_errors.RestError) {
 	logger.Info("agreement service SetDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize agreementId and deadline instance
 	agreementId = html.EscapeString(agreementId)
 	deadline.Sanitize()
+	typeKey = strings.TrimSpace(html.EscapeString(typeKey))
+	typeVal = strings.TrimSpace(html.EscapeString(typeVal))
+
+	if typeKey != "type" || typeVal != "solo" && typeVal != "directed" && typeVal != "collaborative" {
+		logger.Error(fmt.Sprintf("agreement service SetDeadline - improper type key/val: %s %s", typeKey, typeVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("improper type key/val: " + typeKey + "/" + typeVal)
+	}
+
+	// Get Existing Agreement
+	agreement, getErr := a.GetAgreement(ctx, agreementId)
+	if getErr != nil {
+		return nil, getErr
+	}
 
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
@@ -339,11 +352,40 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 
 	// Status must be passed in request
 	if deadline.Status == "" {
+		logger.Error("agreement service SetDeadline - no status in request", errors.New("missing status in request"), context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewBadRequestError("missing status field of deadline instance")
 	}
 
 	logger.Info("agreement service SetDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return a.AgreementRepository.SetDeadline(ctx, agreementId, deadline)
+	if typeVal == "solo" {
+		return a.AgreementRepository.SetDeadline(ctx, agreementId, deadline)
+	} else if typeVal == "directed" {
+		notifications := make([]domain.Notification, 0)
+		for i := 0; i < len(agreement.Participants); i++ {
+			if agreement.Participants[i] == agreement.CreatedBy {
+				continue
+			}
+
+			notifications = append(notifications, domain.Notification{
+				Id:               uuid.NewString(),
+				Title:            fmt.Sprintf("%s updated deadline of '%s' agreement", agreement.CreatorName, agreement.Title),
+				Message:          "",
+				CreateDateTime:   time.Now().UTC(),
+				Status:           "new",
+				UserId:           agreement.Participants[i],
+				ContactId:        agreement.CreatedBy,
+				ContactFirstName: agreement.CreatorName,
+				AgreementId:      agreement.Id,
+				AgreementTitle:   agreement.Title,
+				Response:         "",
+				Type:             "notifyUpdate",
+				Action:           "update",
+			})
+		}
+		return a.AgreementRepository.SetDeadlineDirected(ctx, agreementId, deadline, notifications)
+	} else { // TODO collaborative
+		return nil, nil
+	}
 }
 
 func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string) (*domain.Agreement, rest_errors.RestError) {
