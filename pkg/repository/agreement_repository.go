@@ -31,6 +31,7 @@ type AgreementRepositoryInterface interface {
 	SetDeadline(context.Context, string, domain.Deadline) (*domain.Agreement, rest_errors.RestError)
 	SetDeadlineDirected(context.Context, string, domain.Deadline, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
 	DeleteDeadline(context.Context, string) (*domain.Agreement, rest_errors.RestError)
+	DeleteDeadlineDirected(context.Context, string, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
 	ActionAndNotification(context.Context, []string, domain.Notification) (*domain.Notification, rest_errors.RestError)
 }
 
@@ -453,7 +454,7 @@ func (a agreementRepository) SetDeadline(ctx context.Context, agreementId string
 	return &resAgreement, nil
 }
 
-func (a agreementRepository) 	SetDeadlineDirected(ctx context.Context, id string, deadline domain.Deadline, notifications []domain.Notification) (*domain.Agreement, rest_errors.RestError) {
+func (a agreementRepository) SetDeadlineDirected(ctx context.Context, id string, deadline domain.Deadline, notifications []domain.Notification) (*domain.Agreement, rest_errors.RestError) {
 	logger.Info("agreement repository SetDeadlineDirected start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	client, mongoErr := db.GetMongoClient()
@@ -485,7 +486,7 @@ func (a agreementRepository) 	SetDeadlineDirected(ctx context.Context, id string
 			logger.Error(fmt.Sprintf("agreement repository SetDeadlineDirected could not FindOneAndUpdate id: %s", id), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
 			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to delete deadline and get doc back id: %s", id), errors.New("database error"))
 		}
-	
+
 		var resAgreement domain.Agreement
 		decodeErr := res.Decode(&resAgreement)
 		if decodeErr != nil {
@@ -566,6 +567,83 @@ func (a agreementRepository) DeleteDeadline(ctx context.Context, agreementId str
 	}
 
 	logger.Info("agreement repository DeleteDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return &resAgreement, nil
+}
+
+func (a agreementRepository) DeleteDeadlineDirected(ctx context.Context, id string, notifications []domain.Notification) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement repository DeleteDeadlineDirected start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
+	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
+	notificationColl := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName, wcMajorityCollectionOpts)
+	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// Update Agreement
+		filter := bson.D{primitive.E{Key: "_id", Value: id}}
+
+		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
+			primitive.E{Key: "agreement_deadline.status", Value: "deleted"},
+		}}}
+
+		res := agreementColl.FindOneAndUpdate(ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+		if res.Err() != nil {
+			if res.Err().Error() == "mongo: no documents in result" {
+				logger.Error(fmt.Sprintf("No agreement found for id: %s: ", id), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", id))
+			}
+			logger.Error(fmt.Sprintf("agreement repository DeleteDeadlineDirected could not FindOneAndUpdate id: %s", id), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to delete deadline and get doc back id: %s", id), errors.New("database error"))
+		}
+
+		var resAgreement domain.Agreement
+		decodeErr := res.Decode(&resAgreement)
+		if decodeErr != nil {
+			logger.Error("agreement repository DeleteDeadlineDirected could not decode update doc to Agreement type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error when trying to retrieve updated document", errors.New("database error"))
+		}
+
+		// Insert Notifications
+		inserts := make([]interface{}, len(notifications))
+		for i := range notifications {
+			inserts[i] = notifications[i]
+		}
+		_, insertErr := notificationColl.InsertMany(sessCtx, inserts)
+		if insertErr != nil {
+			logger.Error("agreement repository DeleteDeadlineDirected transaction to insert notifications failed", insertErr, context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewInternalServerError("could not insert notifications", errors.New("database error"))
+		}
+
+		return resAgreement, nil
+	}
+
+	session, err := client.StartSession()
+	if err != nil {
+		logger.Error("agreement repository DeleteDeadlineDirected - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
+	}
+	defer session.EndSession(ctx)
+
+	res, transactionErr := session.WithTransaction(ctx, callback)
+	if transactionErr != nil {
+		logger.Error("agreement repository DeleteDeadlineDirected - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+	}
+
+	resAgreement, ok := res.(domain.Agreement)
+	if !ok {
+		logger.Error("agreement repository DeleteDeadlineDirected - assertion failed", fmt.Errorf("could not assert into domain.Agreement: %v", res), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db type assertion failed", errors.New("assertion error"))
+	}
+
+	logger.Info("agreement repository DeleteDeadlineDirected finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return &resAgreement, nil
 }
 

@@ -376,7 +376,26 @@ func (a agreementsResource) DeleteDeadline(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	returnedAgreement, serviceErr := a.AgreementService.DeleteDeadline(r.Context(), agreementId)
+	logger.Info("agreement controller DeleteDeadline about to read query params", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	if !strings.Contains(r.URL.String(), "?") || !strings.Contains(r.URL.String(), "=") {
+		logger.Error("agreement controller DeleteDeadline - no query params: "+r.URL.String(), errors.New("missing query"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("missing query params"))
+		return
+	}
+
+	queryParams := strings.Split(strings.Split(r.URL.String(), "?")[1], "=")
+
+	if len(queryParams) != 2 {
+		logger.Error("agreement controller DeleteDeadline - expected 1 query param: "+r.URL.String(), errors.New("# query param mismatched"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("incorrect # of query params"))
+		return
+	}
+
+	typeKey := queryParams[0]
+	typeVal := queryParams[1]
+
+	returnedAgreement, serviceErr := a.AgreementService.DeleteDeadline(r.Context(), agreementId, typeKey, typeVal)
 	if serviceErr != nil {
 		http_utils.ResponseError(w, serviceErr)
 		return

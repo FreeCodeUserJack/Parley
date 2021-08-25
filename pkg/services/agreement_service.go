@@ -25,7 +25,7 @@ type AgreementServiceInterface interface {
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	SetDeadline(context.Context, string, domain.Deadline, string, string) (*domain.Agreement, rest_errors.RestError)
-	DeleteDeadline(context.Context, string) (*domain.Agreement, rest_errors.RestError)
+	DeleteDeadline(context.Context, string, string, string) (*domain.Agreement, rest_errors.RestError)
 	ActionAndNotification(context.Context, domain.Notification) (*domain.Notification, rest_errors.RestError)
 }
 
@@ -162,7 +162,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	typeVal = strings.TrimSpace(html.EscapeString(typeVal))
 
 	if typeKey != "type" || typeVal != "solo" && typeVal != "directed" && typeVal != "collaborative" {
-		logger.Error(fmt.Sprintf("agreement service CloseAgreement - improper type key/val: %s %s", typeKey, typeVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
+		logger.Error(fmt.Sprintf("agreement service UpdateAgreement - improper type key/val: %s %s", typeKey, typeVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewBadRequestError("improper type key/val: " + typeKey + "/" + typeVal)
 	}
 
@@ -174,6 +174,12 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	savedAgreement, getErr := a.GetAgreement(ctx, agreement.Id)
 	if getErr != nil {
 		return nil, getErr
+	}
+
+	// Check if agreement already closed
+	if agreement.Status == "retired" || agreement.Status == "finished" {
+		logger.Error(fmt.Sprintf("agreement service UpdateAgreement - agreement already closed: %v", agreement), getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("agreement already closed: " + agreement.Id)
 	}
 
 	// Check which fields need to be set
@@ -335,6 +341,12 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 		return nil, getErr
 	}
 
+	// Check if agreement already closed
+	if agreement.Status == "retired" || agreement.Status == "finished" {
+		logger.Error(fmt.Sprintf("agreement service SetDeadline - agreement already closed: %v", agreement), getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("agreement already closed: " + agreementId)
+	}
+
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
 	if archiveErr == nil {
@@ -388,11 +400,30 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 	}
 }
 
-func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string) (*domain.Agreement, rest_errors.RestError) {
-	logger.Info("agreement service DeleteDeadline start", context_utils.GetTraceAndClientIds(ctx)...)
+func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string, typeKey string, typeVal string) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement service DeleteDeadlineDirected start", context_utils.GetTraceAndClientIds(ctx)...)
 
-	// Sanitize agreementId
+	// Sanitize agreementId and query param
 	agreementId = html.EscapeString(agreementId)
+	typeKey = strings.TrimSpace(html.EscapeString(typeKey))
+	typeVal = strings.TrimSpace(html.EscapeString(typeVal))
+
+	if typeKey != "type" || typeVal != "solo" && typeVal != "directed" && typeVal != "collaborative" {
+		logger.Error(fmt.Sprintf("agreement service DeleteDeadlineDirected - improper type key/val: %s %s", typeKey, typeVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("improper type key/val: " + typeKey + "/" + typeVal)
+	}
+
+	// Get Existing Agreement
+	agreement, getErr := a.GetAgreement(ctx, agreementId)
+	if getErr != nil {
+		return nil, getErr
+	}
+
+	// Check if agreement already closed
+	if agreement.Status == "retired" || agreement.Status == "finished" {
+		logger.Error(fmt.Sprintf("agreement service DeleteDeadline - agreement already closed: %v", agreement), getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("agreement already closed: " + agreementId)
+	}
 
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
@@ -402,8 +433,36 @@ func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string
 		}()
 	}
 
-	logger.Info("agreement service DeleteDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return a.AgreementRepository.DeleteDeadline(ctx, agreementId)
+	logger.Info("agreement service DeleteDeadlineDirected finish", context_utils.GetTraceAndClientIds(ctx)...)
+	if typeVal == "solo" {
+		return a.AgreementRepository.DeleteDeadline(ctx, agreementId)
+	} else if typeVal == "directed" {
+		notifications := make([]domain.Notification, 0)
+		for i := 0; i < len(agreement.Participants); i++ {
+			if agreement.Participants[i] == agreement.CreatedBy {
+				continue
+			}
+
+			notifications = append(notifications, domain.Notification{
+				Id:               uuid.NewString(),
+				Title:            fmt.Sprintf("%s removed deadline of '%s' agreement", agreement.CreatorName, agreement.Title),
+				Message:          "",
+				CreateDateTime:   time.Now().UTC(),
+				Status:           "new",
+				UserId:           agreement.Participants[i],
+				ContactId:        agreement.CreatedBy,
+				ContactFirstName: agreement.CreatorName,
+				AgreementId:      agreement.Id,
+				AgreementTitle:   agreement.Title,
+				Response:         "",
+				Type:             "notifyUpdate",
+				Action:           "update",
+			})
+		}
+		return a.AgreementRepository.DeleteDeadlineDirected(ctx, agreementId, notifications)
+	} else { // TODO collaborative
+		return nil, nil
+	}
 }
 
 func archiveAgreementHelper(ctx context.Context, agreementRepo repository.AgreementRepositoryInterface, agreementArchiveRepo repository.AgreementArchiveRepositoryInterface, id, status, info string, agreement *domain.Agreement) (*domain.AgreementArchive, rest_errors.RestError) {
