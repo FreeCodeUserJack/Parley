@@ -70,6 +70,7 @@ func (a agreementRepository) CloseAgreement(ctx context.Context, uuid string, co
 
 	updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
 		primitive.E{Key: "status", Value: completionReason},
+		primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
 	}}}
 
 	client, mongoErr := db.GetMongoClient()
@@ -113,6 +114,7 @@ func (a agreementRepository) CloseAgreementDirected(ctx context.Context, uuid st
 
 		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
 			primitive.E{Key: "status", Value: completionReason},
+			primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
 		}}}
 
 		res1, err1 := agreementColl.UpdateOne(sessCtx, filter, updater)
@@ -356,9 +358,18 @@ func (a agreementRepository) AddUserToAgreement(ctx context.Context, agreementId
 
 	filter := bson.D{primitive.E{Key: "_id", Value: agreementId}}
 
-	updater := bson.D{primitive.E{Key: "$push", Value: bson.D{
-		primitive.E{Key: "participants", Value: friendId},
-	}}}
+	updater := bson.D{
+		primitive.E{
+			Key: "$push", Value: bson.D{
+				primitive.E{Key: "participants", Value: friendId},
+			},
+		},
+		primitive.E{
+			Key: "$set", Value: bson.D{
+				primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
+			},
+		},
+	}
 
 	client, mongoErr := db.GetMongoClient()
 	if mongoErr != nil {
@@ -388,9 +399,18 @@ func (a agreementRepository) RemoveUserFromAgreement(ctx context.Context, agreem
 
 	filter := bson.D{primitive.E{Key: "_id", Value: agreementId}}
 
-	updater := bson.D{primitive.E{Key: "$pull", Value: bson.D{
-		primitive.E{Key: "participants", Value: friendId},
-	}}}
+	updater := bson.D{
+		primitive.E{
+			Key: "$pull", Value: bson.D{
+				primitive.E{Key: "participants", Value: friendId},
+			},
+		},
+		primitive.E{
+			Key: "$set", Value: bson.D{
+				primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
+			},
+		},
+	}
 
 	client, mongoErr := db.GetMongoClient()
 	if mongoErr != nil {
@@ -422,6 +442,7 @@ func (a agreementRepository) SetDeadline(ctx context.Context, agreementId string
 
 	updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
 		primitive.E{Key: "agreement_deadline", Value: deadline},
+		primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
 	}}}
 
 	client, mongoErr := db.GetMongoClient()
@@ -474,6 +495,7 @@ func (a agreementRepository) SetDeadlineDirected(ctx context.Context, id string,
 
 		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
 			primitive.E{Key: "agreement_deadline", Value: deadline},
+			primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
 		}}}
 
 		res := agreementColl.FindOneAndUpdate(ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
@@ -538,6 +560,7 @@ func (a agreementRepository) DeleteDeadline(ctx context.Context, agreementId str
 
 	updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
 		primitive.E{Key: "agreement_deadline.status", Value: "deleted"},
+		primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
 	}}}
 
 	client, mongoErr := db.GetMongoClient()
@@ -590,6 +613,7 @@ func (a agreementRepository) DeleteDeadlineDirected(ctx context.Context, id stri
 
 		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
 			primitive.E{Key: "agreement_deadline.status", Value: "deleted"},
+			primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
 		}}}
 
 		res := agreementColl.FindOneAndUpdate(ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))

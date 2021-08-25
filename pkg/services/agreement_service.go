@@ -276,8 +276,8 @@ func (a agreementService) SearchAgreements(ctx context.Context, key string, val 
 	}
 
 	// Sanitize key + val
-	key = html.EscapeString(key)
-	val = html.EscapeString(val)
+	key = strings.TrimSpace(html.EscapeString(key))
+	val = strings.TrimSpace(html.EscapeString(val))
 
 	logger.Info("agreement service SearchAgreements finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.SearchAgreements(ctx, key, val)
