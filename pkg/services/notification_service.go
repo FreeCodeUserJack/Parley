@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
+	"github.com/FreeCodeUserJack/Parley/pkg/dto"
 	"github.com/FreeCodeUserJack/Parley/pkg/repository"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/context_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/rest_errors"
@@ -17,6 +18,7 @@ import (
 type NotificationServiceInterface interface {
 	GetUserNotifications(context.Context, string, string, string) ([]domain.Notification, rest_errors.RestError)
 	MarkNotificationRead(context.Context, string) (string, rest_errors.RestError)
+	MarkAllNotificationRead(context.Context, dto.UuidsRequest) (string, rest_errors.RestError)
 }
 
 type notificationService struct {
@@ -54,4 +56,14 @@ func (n notificationService) MarkNotificationRead(ctx context.Context, id string
 
 	logger.Info("notification service MarkNotificationRead finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return n.NotificationRepository.MarkNotificationRead(ctx, id)
+}
+
+func (n notificationService) MarkAllNotificationRead(ctx context.Context, uuids dto.UuidsRequest) (string, rest_errors.RestError) {
+	logger.Info("notification service MarkAllNotificationRead start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize uuids
+	uuids.Payload = domain.SanitizeStringSlice(uuids.Payload)
+
+	logger.Info("notification service MarkAllNotificationRead finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return n.NotificationRepository.MarkAllNotificationRead(ctx, uuids)
 }

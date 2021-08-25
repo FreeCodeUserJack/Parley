@@ -3,9 +3,11 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/db"
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
+	"github.com/FreeCodeUserJack/Parley/pkg/dto"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/context_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/rest_errors"
 	"github.com/FreeCodeUserJack/Parley/tools/logger"
@@ -18,6 +20,7 @@ type NotificationRepositoryInterface interface {
 	DeleteNotification(context.Context, string) rest_errors.RestError
 	GetUserNotifications(context.Context, string, string) ([]domain.Notification, rest_errors.RestError)
 	MarkNotificationRead(context.Context, string) (string, rest_errors.RestError)
+	MarkAllNotificationRead(context.Context, dto.UuidsRequest) (string, rest_errors.RestError)
 }
 
 type notificationRepository struct{}
@@ -147,4 +150,37 @@ func (n notificationRepository) MarkNotificationRead(ctx context.Context, id str
 
 	logger.Info("notification repository MarkNotificationRead finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return id, nil
+}
+
+func (n notificationRepository) MarkAllNotificationRead(ctx context.Context, uuids dto.UuidsRequest) (string, rest_errors.RestError) {
+	logger.Info("notification repository MarkAllNotificationRead start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	filter := bson.D{bson.E{Key: "_id", Value: bson.D{
+		primitive.E{Key: "$in", Value: uuids.Payload},
+	}}}
+
+	updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
+		primitive.E{Key: "status", Value: "old"},
+	}}}
+
+	collection := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName)
+
+	_, dbErr := collection.UpdateMany(ctx, filter, updater)
+	if dbErr != nil {
+		if dbErr.Error() == "mongo: no documents in result" {
+			logger.Error(fmt.Sprintf("notification repository MarkAllNotificationRead no notifications found: %v", uuids), errors.New("no notification docs found"), context_utils.GetTraceAndClientIds(ctx)...)
+			return "", rest_errors.NewBadRequestError("no notification docs found")
+		}
+		logger.Error(fmt.Sprintf("notification repository MarkAllNotificationRead - error when trying to update: %v", uuids), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("error when trying to update notifications", errors.New("database error"))
+	}
+
+	logger.Info("notification repository MarkAllNotificationRead finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return "updated", nil
 }

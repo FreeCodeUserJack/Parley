@@ -105,16 +105,16 @@ func (a *Agreement) Sanitize() {
 	a.Status = strings.TrimSpace(html.EscapeString(a.Status))
 	a.Public = strings.TrimSpace(html.EscapeString(a.Public))
 	a.Type = strings.TrimSpace(html.EscapeString(a.Type))
-	a.Tags = sanitizeStringSlice(a.Tags)
-	a.Participants = sanitizeStringSlice(a.Participants)
-	a.InvitedParticipants = sanitizeStringSlice(a.InvitedParticipants)
-	a.RequestedParticipants = sanitizeStringSlice(a.RequestedParticipants)
-	a.PendingRemovalParticipants = sanitizeStringSlice(a.PendingRemovalParticipants)
-	a.PendingLeaveParticipants = sanitizeStringSlice(a.PendingLeaveParticipants)
+	a.Tags = SanitizeStringSlice(a.Tags)
+	a.Participants = SanitizeStringSlice(a.Participants)
+	a.InvitedParticipants = SanitizeStringSlice(a.InvitedParticipants)
+	a.RequestedParticipants = SanitizeStringSlice(a.RequestedParticipants)
+	a.PendingRemovalParticipants = SanitizeStringSlice(a.PendingRemovalParticipants)
+	a.PendingLeaveParticipants = SanitizeStringSlice(a.PendingLeaveParticipants)
 	a.Location = removeAngularBrackets(a.Location)
 }
 
-func sanitizeStringSlice(input []string) []string {
+func SanitizeStringSlice(input []string) []string {
 	res := make([]string, len(input))
 
 	for i := 0; i < len(input); i++ {

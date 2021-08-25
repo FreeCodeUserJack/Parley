@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -24,8 +26,7 @@ type NotificationControllerInterface interface {
 	Routes() chi.Router
 	GetUserNotifications(w http.ResponseWriter, r *http.Request)
 	MarkNotificationRead(w http.ResponseWriter, r *http.Request)
-	RespondNotification(w http.ResponseWriter, r *http.Request)
-	MarkAllNotifiationRead(w http.ResponseWriter, r *http.Request)
+	MarkAllNotificationRead(w http.ResponseWriter, r *http.Request)
 }
 
 type notificationController struct {
@@ -35,10 +36,9 @@ type notificationController struct {
 func (n notificationController) Routes() chi.Router {
 	router := chi.NewRouter()
 	router.Get("/{userId}", n.GetUserNotifications)
-	router.Put("/MarkAllRead", n.MarkAllNotifiationRead)
+	router.Put("/MarkAllRead", n.MarkAllNotificationRead)
 
 	router.Route("/{notificationId}", func(r chi.Router) {
-		r.Put("/Reponse", n.RespondNotification)
 		r.Put("/MarkRead", n.MarkNotificationRead)
 	})
 
@@ -108,10 +108,34 @@ func (n notificationController) MarkNotificationRead(w http.ResponseWriter, r *h
 	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "Notification status set to old for id: ", Id: resId})
 }
 
-func (n notificationController) RespondNotification(w http.ResponseWriter, r *http.Request) {
+func (n notificationController) MarkAllNotificationRead(w http.ResponseWriter, r *http.Request) {
+	logger.Info("notification controller MarkAllNotificationRead about to read body", context_utils.GetTraceAndClientIds(r.Context())...)
 
-}
+	reqBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		restErr := rest_errors.NewBadRequestError("missing req body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+	defer r.Body.Close()
 
-func (n notificationController) MarkAllNotifiationRead(w http.ResponseWriter, r *http.Request) {
+	var uuids dto.UuidsRequest
 
+	jsonErr := json.Unmarshal(reqBytes, &uuids)
+	if jsonErr != nil {
+		restErr := rest_errors.NewBadRequestError("invalid json body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+
+	_, serviceErr := n.NotificationService.MarkAllNotificationRead(r.Context(), uuids)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("notification controller MarkAllNotificationRead returning to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "changed all notifications to old"})
 }
