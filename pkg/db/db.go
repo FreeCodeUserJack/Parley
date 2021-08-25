@@ -22,6 +22,7 @@ const (
 	envAgreementArchiveCollectionName = "MONGODB_AGREEMENT_ARCHIVE_COLLECTION_NAME"
 	envNotificationCollectionName     = "MONGODB_NOTIFICATION_COLLECTION_NAME"
 	envTokenCollectionName            = "MONGODB_TOKEN_COLLECTION_NAME"
+	envReplicaSetName                 = "MONGODB_REPLICA_SET_NAME"
 )
 
 var (
@@ -32,6 +33,7 @@ var (
 	AgreementArchiveCollectionName = "agreement_archive"
 	NotificationCollectionName     = "notifications"
 	TokenCollectionName            = "tokens"
+	ReplicaSetName                 = "parleyset"
 )
 
 func init() {
@@ -62,6 +64,10 @@ func init() {
 	if tokencolname := os.Getenv(envTokenCollectionName); tokencolname != "" {
 		TokenCollectionName = tokencolname
 	}
+
+	if replicaname := os.Getenv(envReplicaSetName); replicaname != "" {
+		ReplicaSetName = replicaname
+	}
 }
 
 func GetMongoClient() (*mongo.Client, error) {
@@ -69,7 +75,7 @@ func GetMongoClient() (*mongo.Client, error) {
 
 		// SetHosts for multi nodes in cluster
 		clientOptions := options.Client().ApplyURI(mongoDBConnectionString)
-		clientOptions.SetReplicaSet("parleyset")
+		clientOptions.SetReplicaSet(ReplicaSetName)
 
 		client, err := mongo.Connect(context.TODO(), clientOptions)
 		if err != nil {

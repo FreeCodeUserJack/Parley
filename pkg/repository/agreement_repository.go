@@ -23,6 +23,7 @@ type AgreementRepositoryInterface interface {
 	CloseAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	CloseAgreementDirected(context.Context, string, string, []domain.Notification) (string, rest_errors.RestError)
 	UpdateAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
+	UpdateAgreementDirected(context.Context, domain.Agreement, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
@@ -188,6 +189,76 @@ func (a agreementRepository) UpdateAgreement(ctx context.Context, agreement doma
 	}
 
 	logger.Info("agreement repository UpdateAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return &agreement, nil
+}
+
+func (a agreementRepository) UpdateAgreementDirected(ctx context.Context, agreement domain.Agreement, notifications []domain.Notification) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement repository UpdateAgreementDirected start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
+	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
+	notificationColl := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName, wcMajorityCollectionOpts)
+	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// Update Agreement
+		filter := bson.D{primitive.E{Key: "_id", Value: agreement.Id}}
+
+		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
+			primitive.E{Key: "title", Value: agreement.Title},
+			primitive.E{Key: "description", Value: agreement.Description},
+			primitive.E{Key: "participants", Value: agreement.Participants},
+			primitive.E{Key: "last_update_datetime", Value: agreement.LastUpdateDateTime},
+			primitive.E{Key: "agreement_deadline", Value: agreement.AgreementDeadline},
+			primitive.E{Key: "status", Value: agreement.Status},
+			primitive.E{Key: "public", Value: agreement.Public},
+		}}}
+
+		res1, err1 := agreementColl.UpdateOne(sessCtx, filter, updater)
+		if err1 != nil {
+			logger.Error("agreement repository UpdateAgreementDirected db error", err1, context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewInternalServerError("error when trying to close doc with id: "+agreement.Id, errors.New("database error"))
+		}
+
+		if res1.MatchedCount == 0 {
+			logger.Error("agreement repository UpdateAgreementDirected no doc found", errors.New("no doc with id: "+agreement.Id+" found"), context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewNotFoundError("doc with id: " + agreement.Id + " not found")
+		}
+
+		// Insert Notifications
+		inserts := make([]interface{}, len(notifications))
+		for i := range notifications {
+			inserts[i] = notifications[i]
+		}
+		_, insertErr := notificationColl.InsertMany(sessCtx, inserts)
+		if insertErr != nil {
+			logger.Error("agreement repository UpdateAgreementDirected transaction to insert notifications failed", insertErr, context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewInternalServerError("could not insert notifications", errors.New("database error"))
+		}
+
+		return nil, nil
+	}
+
+	session, err := client.StartSession()
+	if err != nil {
+		logger.Error("agreement repository UpdateAgreementDirected - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
+	}
+	defer session.EndSession(ctx)
+
+	_, transactionErr := session.WithTransaction(ctx, callback)
+	if transactionErr != nil {
+		logger.Error("agreement repository UpdateAgreementDirected - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+	}
+
+	logger.Info("agreement repository UpdateAgreementDirected finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return &agreement, nil
 }
 

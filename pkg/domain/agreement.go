@@ -99,8 +99,6 @@ func (t *Time) UnmarshalJSON(data []byte) error {
 // the slice array for participants of ActionAndNotification will never be passed as input and won't ever be set from json requests
 func (a *Agreement) Sanitize() {
 	a.Id = strings.TrimSpace(html.EscapeString(a.Id))
-	// a.Title = html.EscapeString(a.Title)
-	// a.Description = html.EscapeString(a.Description)
 	a.CreatedBy = strings.TrimSpace(html.EscapeString(a.CreatedBy))
 	a.CreatorName = strings.TrimSpace(html.EscapeString(a.CreatorName))
 	a.AgreementDeadline.Sanitize()
@@ -114,6 +112,8 @@ func (a *Agreement) Sanitize() {
 	a.PendingRemovalParticipants = SanitizeStringSlice(a.PendingRemovalParticipants)
 	a.PendingLeaveParticipants = SanitizeStringSlice(a.PendingLeaveParticipants)
 	a.Location = removeAngularBrackets(a.Location)
+	a.Title = removeAngularBrackets(a.Title)
+	a.Description = removeAngularBrackets(a.Description)
 }
 
 func SanitizeStringSlice(input []string) []string {

@@ -19,7 +19,7 @@ import (
 type AgreementServiceInterface interface {
 	NewAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
 	CloseAgreement(context.Context, string, string, string, string, string) (string, rest_errors.RestError)
-	UpdateAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
+	UpdateAgreement(context.Context, domain.Agreement, string, string) (*domain.Agreement, rest_errors.RestError)
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
@@ -131,7 +131,7 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey,
 
 			notifications = append(notifications, domain.Notification{
 				Id:               uuid.NewString(),
-				Title:            fmt.Sprintf("%s updated '%s' agreement", agreement.CreatorName, agreement.Title),
+				Title:            fmt.Sprintf("%s %s '%s' agreement", agreement.CreatorName, completionVal, agreement.Title),
 				Message:          "",
 				CreateDateTime:   time.Now().UTC(),
 				Status:           "new",
@@ -142,7 +142,7 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey,
 				AgreementTitle:   agreement.Title,
 				Response:         "",
 				Type:             "notifyUpdate",
-				Action:           "update",
+				Action:           "close",
 			})
 		}
 		return a.AgreementRepository.CloseAgreementDirected(ctx, id, completionVal, notifications)
@@ -152,10 +152,19 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey,
 	}
 }
 
-func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.Agreement) (*domain.Agreement, rest_errors.RestError) {
+func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.Agreement, typeKey, typeVal string) (*domain.Agreement, rest_errors.RestError) {
 	logger.Info("agreement service UpdateAgreement called", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize fields
+	agreement.Sanitize()
+
+	typeKey = strings.TrimSpace(html.EscapeString(typeKey))
+	typeVal = strings.TrimSpace(html.EscapeString(typeVal))
+
+	if typeKey != "type" || typeVal != "solo" && typeVal != "directed" && typeVal != "collaborative" {
+		logger.Error(fmt.Sprintf("agreement service CloseAgreement - improper type key/val: %s %s", typeKey, typeVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("improper type key/val: " + typeKey + "/" + typeVal)
+	}
 
 	// Get Existing Agreement and update fields that are different
 	currTime := time.Now().UTC()
@@ -211,7 +220,35 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	}
 
 	logger.Info("agreement service UpdateAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return a.AgreementRepository.UpdateAgreement(ctx, agreement)
+	if typeVal == "solo" {
+		return a.AgreementRepository.UpdateAgreement(ctx, agreement)
+	} else if typeVal == "directed" {
+		notifications := make([]domain.Notification, 0)
+		for i := 0; i < len(agreement.Participants); i++ {
+			if agreement.Participants[i] == agreement.CreatedBy {
+				continue
+			}
+
+			notifications = append(notifications, domain.Notification{
+				Id:               uuid.NewString(),
+				Title:            fmt.Sprintf("%s updated '%s' agreement", agreement.CreatorName, agreement.Title),
+				Message:          "",
+				CreateDateTime:   time.Now().UTC(),
+				Status:           "new",
+				UserId:           agreement.Participants[i],
+				ContactId:        agreement.CreatedBy,
+				ContactFirstName: agreement.CreatorName,
+				AgreementId:      agreement.Id,
+				AgreementTitle:   agreement.Title,
+				Response:         "",
+				Type:             "notifyUpdate",
+				Action:           "update",
+			})
+		}
+		return a.AgreementRepository.UpdateAgreementDirected(ctx, agreement, notifications)
+	} else { // TODO collaborative
+		return nil, nil
+	}
 }
 
 func (a agreementService) GetAgreement(ctx context.Context, id string) (*domain.Agreement, rest_errors.RestError) {
