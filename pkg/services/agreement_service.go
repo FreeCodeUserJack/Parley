@@ -93,7 +93,7 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey,
 		return "", rest_errors.NewBadRequestError("improper completion key/val: " + completionKey + "/" + completionVal)
 	}
 
-	if typeKey != "type" || typeVal != "solo" && typeVal != "directed" && typeVal != "collborative" {
+	if typeKey != "type" || typeVal != "solo" && typeVal != "directed" && typeVal != "collaborative" {
 		logger.Error(fmt.Sprintf("agreement service CloseAgreement - improper type key/val: %s %s %s", id, typeKey, typeVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
 		return "", rest_errors.NewBadRequestError("improper type key/val: " + typeKey + "/" + typeVal)
 	}

@@ -54,7 +54,7 @@ func (jd JSONDeadline) Deadline() Deadline {
 	return deadline
 }
 
-// Validation
+// Validate : Validation
 func (d Deadline) Validate() bool {
 	if d.DeadlineDateTime.IsZero() || d.Status == "" {
 		return false

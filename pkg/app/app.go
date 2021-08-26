@@ -26,7 +26,7 @@ func StartApplication() {
 		}
 	}()
 
-	logger.Info("app initilization started")
+	logger.Info("app initialization started")
 
 	if envPort := os.Getenv("APP_PORT"); envPort != "" {
 		port = envPort
@@ -65,7 +65,7 @@ func StartApplication() {
 	// setup Notification repo/service and mount Notifications routes
 	router.Mount("/api/v1/notifications", controllers.NewNotificationController(services.NewNotificationService(repository.NewNotificationRepository())).Routes())
 
-	logger.Info("app initilization finished")
+	logger.Info("app initialization finished")
 
 	if err := http.ListenAndServe(":"+port, router); err != nil {
 		logger.Fatal("app failed to ListenAndServe", err)
