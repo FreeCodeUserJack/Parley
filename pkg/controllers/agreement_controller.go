@@ -134,7 +134,7 @@ func (a agreementsResource) CloseAgreement(w http.ResponseWriter, r *http.Reques
 	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "document deleted", Id: uuid})
 }
 
-// pass in id via url param, then body containing fields that should be updated
+// UpdateAgreement pass in id via url param, then body containing fields that should be updated
 func (a agreementsResource) UpdateAgreement(w http.ResponseWriter, r *http.Request) {
 	logger.Info("agreement controller UpdateAgreement about to read agreement id", context_utils.GetTraceAndClientIds(r.Context())...)
 

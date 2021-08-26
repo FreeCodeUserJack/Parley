@@ -15,7 +15,7 @@ type AgreementArchive struct {
 }
 
 func (a AgreementArchive) MarshalJSON() ([]byte, error) {
-	return json.Marshal(NewArgreementArchiveJSON(a))
+	return json.Marshal(NewAgreementArchiveJSON(a))
 }
 
 func (a *AgreementArchive) UnmarshalJSON(data []byte) error {
@@ -27,7 +27,7 @@ func (a *AgreementArchive) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func NewArgreementArchiveJSON(aa AgreementArchive) AgreementArchiveJSON {
+func NewAgreementArchiveJSON(aa AgreementArchive) AgreementArchiveJSON {
 	return AgreementArchiveJSON{
 		AgreementArchiveAlias(aa),
 		Time{aa.CreateDateTime},

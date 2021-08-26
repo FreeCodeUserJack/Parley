@@ -718,14 +718,14 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 
 	session, err := client.StartSession()
 	if err != nil {
-		logger.Error("agreement repository ActionAndNoritication - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		logger.Error("agreement repository ActionAndNotification - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
 	}
 	defer session.EndSession(ctx)
 
 	_, err = session.WithTransaction(ctx, callback)
 	if err != nil {
-		logger.Error("agreement repository ActionAndNoritication - transaction failed", err, context_utils.GetTraceAndClientIds(ctx)...)
+		logger.Error("agreement repository ActionAndNotification - transaction failed", err, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
 	}
 

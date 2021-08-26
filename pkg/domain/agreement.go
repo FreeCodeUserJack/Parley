@@ -64,7 +64,7 @@ func (ja JSONAgreement) Agreement() Agreement {
 	return agreement
 }
 
-// Validation
+// Validate Validation
 func (a Agreement) Validate() bool {
 	if a.Title == "" || a.Description == "" || a.CreatedBy == "" || len(a.Participants) == 0 || a.Status == "" {
 		return false
@@ -77,8 +77,7 @@ func (a Agreement) Validate() bool {
 	return true
 }
 
-// Time struct for time.Time for custom marshal/unmarshal of this field
-
+// Time : struct for time.Time for custom marshal/unmarshal of this field
 type Time struct {
 	time.Time
 }
@@ -96,7 +95,7 @@ func (t *Time) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// the slice array for participants of ActionAndNotification will never be passed as input and won't ever be set from json requests
+// Sanitize : the slice array for participants of ActionAndNotification will never be passed as input and won't ever be set from json requests
 func (a *Agreement) Sanitize() {
 	a.Id = strings.TrimSpace(html.EscapeString(a.Id))
 	a.CreatedBy = strings.TrimSpace(html.EscapeString(a.CreatedBy))

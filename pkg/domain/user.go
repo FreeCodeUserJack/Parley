@@ -69,7 +69,7 @@ func (ju JSONUser) User() User {
 	return user
 }
 
-// Validation
+// Validate : Validation
 func (u User) Validate() bool {
 	if u.DOB.After(time.Now().UTC()) {
 		return false
@@ -82,7 +82,6 @@ func (u User) Validate() bool {
 	return true
 }
 
-// Sanitize
 func (u *User) Sanitize() {
 	u.Id = html.EscapeString(u.Id)
 	u.FirstName = strings.TrimSpace(html.EscapeString(u.FirstName))
