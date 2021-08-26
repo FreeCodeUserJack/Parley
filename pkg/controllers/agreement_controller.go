@@ -3,7 +3,6 @@ package controllers
 import (
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -66,18 +65,9 @@ func (a agreementsResource) NewAgreement(w http.ResponseWriter, r *http.Request)
 
 	logger.Info("agreement controller NewAgreement reading body", context_utils.GetTraceAndClientIds(r.Context())...)
 
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		restErr := rest_errors.NewBadRequestError("missing req body")
-		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
-		http_utils.ResponseError(w, restErr)
-		return
-	}
-	defer r.Body.Close()
-
 	var reqAgreement domain.Agreement
-
-	jsonErr := json.Unmarshal(reqBody, &reqAgreement)
+	defer r.Body.Close()
+	jsonErr := json.NewDecoder(r.Body).Decode(&reqAgreement)
 	if jsonErr != nil {
 		restErr := rest_errors.NewBadRequestError("invalid json body")
 		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
@@ -178,18 +168,9 @@ func (a agreementsResource) UpdateAgreement(w http.ResponseWriter, r *http.Reque
 
 	logger.Info("agreement controller UpdateAgreement about to read body", context_utils.GetTraceAndClientIds(r.Context())...)
 
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		restErr := rest_errors.NewBadRequestError("missing req body")
-		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
-		http_utils.ResponseError(w, restErr)
-		return
-	}
-	defer r.Body.Close()
-
 	var reqAgreement domain.Agreement
-
-	jsonErr := json.Unmarshal(reqBody, &reqAgreement)
+	defer r.Body.Close()
+	jsonErr := json.NewDecoder(r.Body).Decode(&reqAgreement)
 	if jsonErr != nil {
 		restErr := rest_errors.NewBadRequestError("invalid json body")
 		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
@@ -336,18 +317,9 @@ func (a agreementsResource) SetDeadline(w http.ResponseWriter, r *http.Request) 
 
 	logger.Info("agreement controller SetDeadline about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
 
-	reqBytes, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		restErr := rest_errors.NewBadRequestError("missing req body")
-		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
-		http_utils.ResponseError(w, restErr)
-		return
-	}
-	defer r.Body.Close()
-
 	var reqDeadline domain.Deadline
-
-	jsonErr := json.Unmarshal(reqBytes, &reqDeadline)
+	defer r.Body.Close()
+	jsonErr := json.NewDecoder(r.Body).Decode(&reqDeadline)
 	if jsonErr != nil {
 		restErr := rest_errors.NewBadRequestError("invalid json body")
 		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
@@ -408,17 +380,9 @@ func (a agreementsResource) DeleteDeadline(w http.ResponseWriter, r *http.Reques
 func (a agreementsResource) ActionAndNotification(w http.ResponseWriter, r *http.Request) {
 	logger.Info("agreement controller ActionAndNotification about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
 
-	bodyBytes, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		restErr := rest_errors.NewBadRequestError("missing req body")
-		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
-		http_utils.ResponseError(w, restErr)
-		return
-	}
-	defer r.Body.Close()
-
 	var notification domain.Notification
-	jsonErr := json.Unmarshal(bodyBytes, &notification)
+	defer r.Body.Close()
+	jsonErr := json.NewDecoder(r.Body).Decode(&notification)
 	if jsonErr != nil {
 		restErr := rest_errors.NewBadRequestError("invalid json body")
 		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
