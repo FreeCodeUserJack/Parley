@@ -27,6 +27,7 @@ type AgreementServiceInterface interface {
 	SetDeadline(context.Context, string, domain.Deadline, string, string) (*domain.Agreement, rest_errors.RestError)
 	DeleteDeadline(context.Context, string, string, string) (*domain.Agreement, rest_errors.RestError)
 	ActionAndNotification(context.Context, domain.Notification) (*domain.Notification, rest_errors.RestError)
+	RespondAgreementChange(context.Context, domain.Notification) (*domain.Agreement, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -73,6 +74,8 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 	agreement.RequestedParticipants = []string{}
 	agreement.PendingRemovalParticipants = []string{}
 	agreement.PendingLeaveParticipants = []string{}
+	agreement.AgreementAccept = []string{}
+	agreement.AgreementDecline = []string{}
 
 	logger.Info("agreement service NewAgreement end", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AgreementRepository.NewAgreement(ctx, agreement)
@@ -120,7 +123,7 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey,
 	}
 
 	logger.Info("agreement service CloseAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
-	if typeVal == "solo" {
+	if typeVal == "solo" || len(agreement.Participants) < 2 {
 		return a.AgreementRepository.CloseAgreement(ctx, id, completionVal)
 	} else if typeVal == "directed" {
 		notifications := make([]domain.Notification, 0)
@@ -209,6 +212,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	}
 
 	agreement.Type = savedAgreement.Type
+	agreement.CreateDateTime = savedAgreement.CreateDateTime
 	agreement.CreatedBy = savedAgreement.CreatedBy
 	agreement.CreatorName = savedAgreement.CreatorName
 	agreement.Participants = savedAgreement.Participants
@@ -216,17 +220,22 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	agreement.RequestedParticipants = savedAgreement.RequestedParticipants
 	agreement.PendingRemovalParticipants = savedAgreement.PendingRemovalParticipants
 	agreement.PendingLeaveParticipants = savedAgreement.PendingLeaveParticipants
+	agreement.AgreementAccept = savedAgreement.AgreementAccept
+	agreement.AgreementDecline = savedAgreement.AgreementDecline
+	agreement.UpdatedAgreement = savedAgreement.UpdatedAgreement
 
 	// Archive Agreement Changes
-	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreement.Id, "modified", "agreement was modified", savedAgreement)
-	if archiveErr == nil {
-		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
-		}()
+	if typeVal != "collaborative" {
+		agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreement.Id, "modified", "agreement was modified", savedAgreement)
+		if archiveErr == nil {
+			go func() {
+				a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+			}()
+		}
 	}
 
 	logger.Info("agreement service UpdateAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
-	if typeVal == "solo" {
+	if typeVal == "solo" || len(agreement.Participants) < 2 {
 		return a.AgreementRepository.UpdateAgreement(ctx, agreement)
 	} else if typeVal == "directed" {
 		notifications := make([]domain.Notification, 0)
@@ -251,11 +260,48 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 				Action:           "update",
 			})
 		}
-		return a.AgreementRepository.UpdateAgreementDirected(ctx, agreement, notifications)
+		return a.AgreementRepository.UpdateAgreementNotifications(ctx, agreement, notifications)
 	} else { // TODO collaborative
-		return nil, nil
+		savedAgreement.Status = "awaitingConfirmation"
+		savedAgreement.UpdatedAgreement = &agreement
+
+		notifications := make([]domain.Notification, 0)
+		for i := 0; i < len(agreement.Participants); i++ {
+			if agreement.Participants[i] == agreement.CreatedBy {
+				continue
+			}
+
+			notifications = append(notifications, domain.Notification{
+				Id:               uuid.NewString(),
+				Title:            fmt.Sprintf("%s updated '%s' agreement, please respond", agreement.CreatorName, agreement.Title),
+				Message:          "",
+				CreateDateTime:   time.Now().UTC(),
+				Status:           "new",
+				UserId:           agreement.Participants[i],
+				ContactId:        agreement.CreatedBy,
+				ContactFirstName: agreement.CreatorName,
+				AgreementId:      agreement.Id,
+				AgreementTitle:   agreement.Title,
+				Response:         "",
+				Type:             "requires_response",
+				Action:           "update",
+			})
+		}
+		return a.AgreementRepository.UpdateAgreementNotifications(ctx, *savedAgreement, notifications)
 	}
 }
+
+// func removeCreator(input []string, id string) []string {
+// 	res := []string{}
+
+// 	for _, el := range input {
+// 		if el != id {
+// 			res = append(res, el)
+// 		}
+// 	}
+
+// 	return res
+// }
 
 func (a agreementService) GetAgreement(ctx context.Context, id string) (*domain.Agreement, rest_errors.RestError) {
 	logger.Info("agreement service GetAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
@@ -369,7 +415,7 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 	}
 
 	logger.Info("agreement service SetDeadline finish", context_utils.GetTraceAndClientIds(ctx)...)
-	if typeVal == "solo" {
+	if typeVal == "solo" || len(agreement.Participants) < 2 {
 		return a.AgreementRepository.SetDeadline(ctx, agreementId, deadline)
 	} else if typeVal == "directed" {
 		notifications := make([]domain.Notification, 0)
@@ -434,7 +480,7 @@ func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string
 	}
 
 	logger.Info("agreement service DeleteDeadlineDirected finish", context_utils.GetTraceAndClientIds(ctx)...)
-	if typeVal == "solo" {
+	if typeVal == "solo" || len(agreement.Participants) < 2 {
 		return a.AgreementRepository.DeleteDeadline(ctx, agreementId)
 	} else if typeVal == "directed" {
 		notifications := make([]domain.Notification, 0)
@@ -507,6 +553,13 @@ func (a agreementService) ActionAndNotification(ctx context.Context, notificatio
 
 	// Archive Changes
 	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, notification.AgreementId, "modified", "agreement was modified", nil)
+
+	// check if request to join agreement is public
+	if notification.Action == "request" && agreementArchive.AgreementData.Public == "false" {
+		logger.Error("agreement service ActionAndNotification - request to join on a non public agreement", fmt.Errorf("agreement to request is not public: %+v", agreementArchive.AgreementData), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("agreement is not public: " + notification.AgreementId)
+	}
+
 	if archiveErr == nil {
 		go func() {
 			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
@@ -583,4 +636,95 @@ func init() {
 	}
 
 	// fmt.Printf("%v\n", actionCodes)
+}
+
+func (a agreementService) RespondAgreementChange(ctx context.Context, notification domain.Notification) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement service RespondAgreementChange start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize notification
+	notification.Sanitize()
+
+	if valid := notification.Validate(); !valid {
+		validateErr := rest_errors.NewBadRequestError("req (notification) failed validation")
+		logger.Error("agreement service RespondAgreementChange - could not get agreement", validateErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, validateErr
+	}
+
+	// Get Current Agreement
+	agreement, getErr := a.GetAgreement(ctx, notification.AgreementId)
+	if getErr != nil {
+		logger.Error("agreement service RespondAgreementChange - could not get agreement", getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, getErr
+	}
+
+	agreement.LastUpdateDateTime = time.Now().UTC()
+	if agreement.UpdatedAgreement != nil {
+		agreement.UpdatedAgreement.LastUpdateDateTime = time.Now().UTC()
+	}
+
+	if notification.Response == "accept" {
+		agreement.AgreementAccept = append(agreement.AgreementAccept, notification.UserId)
+		return a.AgreementRepository.UpdateAgreementRead(ctx, *agreement, notification.Id)
+	} else if notification.Response == "decline" {
+		agreement.AgreementDecline = append(agreement.AgreementDecline, notification.UserId)
+		return a.AgreementRepository.UpdateAgreementRead(ctx, *agreement, notification.Id)
+	} else if notification.Response == "commit" {
+		agreement.UpdatedAgreement.AgreementAccept = []string{}
+		agreement.UpdatedAgreement.AgreementDecline = []string{}
+		agreement.UpdatedAgreement.UpdatedAgreement = nil
+
+		var msg string
+		var typestr string
+
+		if notification.Action == "change" {
+			if notification.Type == "complete" || notification.Type == "retire" {
+				msg = "agreement was " + notification.Action + "d"
+			} else {
+				msg = "agreement was changed"
+			}
+			typestr = "Change"
+		} else {
+			msg = "agreement changes reverted"
+			typestr = "Revert"
+		}
+
+		notifications := make([]domain.Notification, 0)
+		for i := 0; i < len(agreement.Participants); i++ {
+			if agreement.Participants[i] == agreement.CreatedBy {
+				continue
+			}
+
+			notifications = append(notifications, domain.Notification{
+				Id:               uuid.NewString(),
+				Title:            fmt.Sprintf("%s committed '%s' agreement - %s", agreement.CreatorName, agreement.Title, msg),
+				Message:          "",
+				CreateDateTime:   time.Now().UTC(),
+				Status:           "new",
+				UserId:           agreement.Participants[i],
+				ContactId:        agreement.CreatedBy,
+				ContactFirstName: agreement.CreatorName,
+				AgreementId:      agreement.Id,
+				AgreementTitle:   agreement.Title,
+				Response:         "",
+				Type:             "notify" + typestr,
+				Action:           "update",
+			})
+		}
+
+		if notification.Action == "change" {
+			if notification.Type == "complete" || notification.Type == "retire" {
+				agreement.UpdatedAgreement.Status = notification.Action
+			}
+			// fmt.Printf("%+v\n", *agreement.UpdatedAgreement)
+			agreement.UpdatedAgreement.Status = "active"
+			return a.AgreementRepository.RespondAgreementChange(ctx, *agreement.UpdatedAgreement, notifications)
+		} else { // notification.Response == "revert"
+			agreement.Status = "active"
+			agreement.UpdatedAgreement = nil
+			return a.AgreementRepository.RespondAgreementChange(ctx, *agreement, notifications)
+		}
+	} else { // response not accepted
+		logger.Error("agreement service RespondAgreementChange - invalid response value: "+notification.Response, errors.New("respond value for notification not valid"), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("notification response value is invalid: " + notification.Response)
+	}
 }

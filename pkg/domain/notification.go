@@ -74,3 +74,11 @@ func (n *Notification) Sanitize() {
 	n.Type = strings.TrimSpace(html.EscapeString(n.Type))
 	n.UserId = strings.TrimSpace(html.EscapeString(n.UserId))
 }
+
+func (n Notification) Validate() bool {
+	if n.AgreementId == "" || n.Type == "" || n.Action == "" {
+		return false
+	}
+
+	return true
+}

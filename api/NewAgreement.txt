@@ -7,36 +7,47 @@ Request
   "participants": ["user_123"],
   "agreement_deadline": {
     "deadline_datetime": 1629080646,
-    "status": "active"
+    "status": "active",
+    "note": "needs to be updated"
   },
   "status": "active",
   "public": "false",
-  "tags": ["labor day", "party"]
+  "tags": ["labor day", "party"],
+  "location": "Santa Fe, CA",
+  "type": "solo"
 }
-
-
 Response
 {
-    "_id": "21647a43-2e6c-44e1-bf71-6fd9cab56e12",
-    "title": "Labor Day Party",
-    "description": "We're going to have a party for Labor Day at my house!",
-    "created_by": "user_123",
-    "archive_id": "",
-    "participants": [
-        "user_123"
-    ],
-    "create_datetime": 1629149357,
-    "last_update_datetime": 1629149357,
-    "agreement_deadline": {
-        "deadline_datetime": 1629080646,
-        "notify_datetime": 1629062957,
-        "last_update_datetime": 1629149357,
-        "status": "active"
-    },
-    "status": "active",
-    "public": "false",
-    "tags": [
-        "labor day",
-        "party"
-    ]
+  "_id": "063f72be-bafb-41a3-a6f9-16ee4040f990",
+  "title": "Labor Day Party",
+  "description": "We're going to have a party for Labor Day at my house!",
+  "created_by": "user_123",
+  "creator_name": "Jack",
+  "participants": [
+      "user_123"
+  ],
+  "invited_participants": [],
+  "requested_participants": [],
+  "pending_removal_participants": [],
+  "pending_leave_participants": [],
+  "agreement_deadline": {
+      "status": "active",
+      "note": "needs to be updated",
+      "deadline_datetime": 1629080646,
+      "notify_datetime": 1628994246,
+      "last_update_datetime": 1629997050
+  },
+  "status": "active",
+  "public": "false",
+  "tags": [
+      "labor day",
+      "party"
+  ],
+  "type": "",
+  "location": "Santa Fe, CA",
+  "upated_agreement": null,
+  "pending_agreement": null,
+  "create_datetime": 1629997050,
+  "last_update_datetime": 1629997050,
+  "type": "solo"
 }

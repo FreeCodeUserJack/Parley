@@ -10,24 +10,27 @@ import (
 type AgreementAlias Agreement
 
 type Agreement struct {
-	Id                         string    `bson:"_id" json:"_id"`
-	Title                      string    `bson:"title" json:"title"`
-	Description                string    `bson:"description" json:"description"`
-	CreatedBy                  string    `bson:"created_by" json:"created_by"`
-	CreatorName                string    `bson:"creator_name" json:"creator_name"`
-	Participants               []string  `bson:"participants" json:"participants"`
-	InvitedParticipants        []string  `bson:"invited_participants" json:"invited_participants"`
-	RequestedParticipants      []string  `bson:"requested_participants" json:"requested_participants"`
-	PendingRemovalParticipants []string  `bson:"pending_removal_participants" json:"pending_removal_participants"`
-	PendingLeaveParticipants   []string  `bson:"pending_leave_participants" json:"pending_leave_participants"`
-	CreateDateTime             time.Time `bson:"create_datetime" json:"-"`
-	LastUpdateDateTime         time.Time `bson:"last_update_datetime" json:"-"`
-	AgreementDeadline          Deadline  `bson:"agreement_deadline" json:"agreement_deadline"`
-	Status                     string    `bson:"status" json:"status"`
-	Public                     string    `bson:"public" json:"public"`
-	Tags                       []string  `bson:"tags" json:"tags"`
-	Type                       string    `bson:"type" json:"type"`
-	Location                   string    `bson:"location" json:"location"`
+	Id                         string     `bson:"_id" json:"_id"`
+	Title                      string     `bson:"title" json:"title"`
+	Description                string     `bson:"description" json:"description"`
+	CreatedBy                  string     `bson:"created_by" json:"created_by"`
+	CreatorName                string     `bson:"creator_name" json:"creator_name"`
+	Participants               []string   `bson:"participants" json:"participants"`
+	InvitedParticipants        []string   `bson:"invited_participants" json:"invited_participants"`
+	RequestedParticipants      []string   `bson:"requested_participants" json:"requested_participants"`
+	PendingRemovalParticipants []string   `bson:"pending_removal_participants" json:"pending_removal_participants"`
+	PendingLeaveParticipants   []string   `bson:"pending_leave_participants" json:"pending_leave_participants"`
+	CreateDateTime             time.Time  `bson:"create_datetime" json:"-"`
+	LastUpdateDateTime         time.Time  `bson:"last_update_datetime" json:"-"`
+	AgreementDeadline          Deadline   `bson:"agreement_deadline" json:"agreement_deadline"`
+	Status                     string     `bson:"status" json:"status"`
+	Public                     string     `bson:"public" json:"public"`
+	Tags                       []string   `bson:"tags" json:"tags"`
+	Type                       string     `bson:"type" json:"type"`
+	Location                   string     `bson:"location" json:"location"`
+	UpdatedAgreement           *Agreement `bson:"updated_agreement" json:"upated_agreement"`
+	AgreementAccept            []string   `bson:"agreement_accept" json:"agreement_accept"`
+	AgreementDecline           []string   `bson:"agreement_decline" json:"agreement_decline"`
 }
 
 func (a Agreement) MarshalJSON() ([]byte, error) {
@@ -113,6 +116,8 @@ func (a *Agreement) Sanitize() {
 	a.Location = removeAngularBrackets(a.Location)
 	a.Title = removeAngularBrackets(a.Title)
 	a.Description = removeAngularBrackets(a.Description)
+	a.AgreementAccept = SanitizeStringSlice(a.AgreementAccept)
+	a.AgreementDecline = SanitizeStringSlice(a.AgreementDecline)
 }
 
 func SanitizeStringSlice(input []string) []string {

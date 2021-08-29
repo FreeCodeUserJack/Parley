@@ -23,7 +23,7 @@ type AgreementRepositoryInterface interface {
 	CloseAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	CloseAgreementDirected(context.Context, string, string, []domain.Notification) (string, rest_errors.RestError)
 	UpdateAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
-	UpdateAgreementDirected(context.Context, domain.Agreement, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
+	UpdateAgreementNotifications(context.Context, domain.Agreement, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	SearchAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
 	AddUserToAgreement(context.Context, string, string) (string, rest_errors.RestError)
@@ -33,6 +33,8 @@ type AgreementRepositoryInterface interface {
 	DeleteDeadline(context.Context, string) (*domain.Agreement, rest_errors.RestError)
 	DeleteDeadlineDirected(context.Context, string, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
 	ActionAndNotification(context.Context, []string, domain.Notification) (*domain.Notification, rest_errors.RestError)
+	UpdateAgreementRead(context.Context, domain.Agreement, string) (*domain.Agreement, rest_errors.RestError)
+	RespondAgreementChange(context.Context, domain.Agreement, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
 }
 
 type agreementRepository struct {
@@ -171,6 +173,11 @@ func (a agreementRepository) UpdateAgreement(ctx context.Context, agreement doma
 		primitive.E{Key: "last_update_datetime", Value: agreement.LastUpdateDateTime},
 		primitive.E{Key: "agreement_deadline", Value: agreement.AgreementDeadline},
 		primitive.E{Key: "status", Value: agreement.Status},
+		primitive.E{Key: "tags", Value: agreement.Tags},
+		primitive.E{Key: "location", Value: agreement.Location},
+		primitive.E{Key: "updated_agreement", Value: agreement.UpdatedAgreement},
+		primitive.E{Key: "agreement_accept", Value: agreement.AgreementAccept},
+		primitive.E{Key: "agreement_decline", Value: agreement.AgreementDecline},
 		primitive.E{Key: "public", Value: agreement.Public},
 	}}}
 
@@ -196,7 +203,7 @@ func (a agreementRepository) UpdateAgreement(ctx context.Context, agreement doma
 	return &agreement, nil
 }
 
-func (a agreementRepository) UpdateAgreementDirected(ctx context.Context, agreement domain.Agreement, notifications []domain.Notification) (*domain.Agreement, rest_errors.RestError) {
+func (a agreementRepository) UpdateAgreementNotifications(ctx context.Context, agreement domain.Agreement, notifications []domain.Notification) (*domain.Agreement, rest_errors.RestError) {
 	logger.Info("agreement repository UpdateAgreementDirected start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	client, mongoErr := db.GetMongoClient()
@@ -221,6 +228,11 @@ func (a agreementRepository) UpdateAgreementDirected(ctx context.Context, agreem
 			primitive.E{Key: "last_update_datetime", Value: agreement.LastUpdateDateTime},
 			primitive.E{Key: "agreement_deadline", Value: agreement.AgreementDeadline},
 			primitive.E{Key: "status", Value: agreement.Status},
+			primitive.E{Key: "tags", Value: agreement.Tags},
+			primitive.E{Key: "location", Value: agreement.Location},
+			primitive.E{Key: "updated_agreement", Value: agreement.UpdatedAgreement},
+			primitive.E{Key: "agreement_accept", Value: agreement.AgreementAccept},
+			primitive.E{Key: "agreement_decline", Value: agreement.AgreementDecline},
 			primitive.E{Key: "public", Value: agreement.Public},
 		}}}
 
@@ -733,4 +745,200 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 
 	logger.Info("agreement repository ActionAndNotification finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return &notification, nil
+}
+
+// Response to Agreement Update and set user notification to old
+func (a agreementRepository) UpdateAgreementRead(ctx context.Context, agreement domain.Agreement, notificationId string) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement repository UpdateAgreementRead start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
+	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
+	notificationColl := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName, wcMajorityCollectionOpts)
+	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// Update Agreement
+		filter := bson.D{
+			primitive.E{Key: "_id", Value: agreement.Id},
+			primitive.E{Key: "updated_agreement", Value: bson.D{
+				primitive.E{Key: "$ne", Value: nil},
+			}},
+		}
+
+		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
+			primitive.E{Key: "agreement_accept", Value: agreement.AgreementAccept},
+			primitive.E{Key: "agreement_decline", Value: agreement.AgreementDecline},
+		}}}
+
+		res := agreementColl.FindOneAndUpdate(ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+		if res.Err() != nil {
+			if res.Err().Error() == "mongo: no documents in result" {
+				logger.Error(fmt.Sprintf("No agreement found for id: %s: ", agreement.Id), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", agreement.Id))
+			}
+			logger.Error(fmt.Sprintf("agreement repository UpdateAgreementRead could not FindOneAndUpdate id: %s", agreement.Id), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to delete deadline and get doc back id: %s", agreement.Id), errors.New("database error"))
+		}
+
+		var resAgreement domain.Agreement
+		decodeErr := res.Decode(&resAgreement)
+		if decodeErr != nil {
+			logger.Error("agreement repository UpdateAgreementRead could not decode update doc to Agreement type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error when trying to retrieve updated document", errors.New("database error"))
+		}
+
+		// Set Notification Status to Old
+		filter2 := bson.D{
+			primitive.E{Key: "_id", Value: notificationId},
+		}
+
+		updater2 := bson.D{primitive.E{Key: "$set", Value: bson.D{
+			primitive.E{Key: "status", Value: "old"},
+		}}}
+
+		_, dbErr := notificationColl.UpdateOne(ctx, filter2, updater2)
+		if dbErr != nil {
+			if dbErr.Error() == "mongo: no documents in result" {
+				logger.Error("agreement repository UpdateAgreementRead no doc found", errors.New("no doc with id: "+notificationId+" found"), context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewBadRequestError("notification doc with id: " + notificationId + " not found")
+			}
+			logger.Error("agreement repository UpdateAgreementRead db error", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error when trying to update notification doc with id: "+notificationId, errors.New("database error"))
+		}
+
+		return resAgreement, nil
+	}
+
+	session, err := client.StartSession()
+	if err != nil {
+		logger.Error("agreement repository UpdateAgreementRead - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
+	}
+	defer session.EndSession(ctx)
+
+	res, transactionErr := session.WithTransaction(ctx, callback)
+	if transactionErr != nil {
+		if transactionErr.Error() == "not_found" {
+			logger.Error("agreement repository UpdateAgreementRead - either no doc found or no notification found", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewBadRequestError("conditions not met for accept/decline")
+		}
+		logger.Error("agreement repository UpdateAgreementRead - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+	}
+
+	resAgreement, ok := res.(domain.Agreement)
+	if !ok {
+		logger.Error("agreement repository UpdateAgreementRead - assertion failed", fmt.Errorf("could not assert into domain.Agreement: %v", res), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db type assertion failed", errors.New("assertion error"))
+	}
+
+	logger.Info("agreement repository UpdateAgreementRead finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return &resAgreement, nil
+}
+
+func (a agreementRepository) RespondAgreementChange(ctx context.Context, agreement domain.Agreement, notifications []domain.Notification) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement repository RespondAgreementChange start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
+	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
+	notificationColl := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName, wcMajorityCollectionOpts)
+	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// Update Agreement
+		filter := bson.D{primitive.E{Key: "_id", Value: agreement.Id}}
+
+		var updater bson.D
+
+		if notifications[0].Type == "notifyChange" {
+			// fmt.Printf("%+v\n", agreement)
+			updater = bson.D{primitive.E{Key: "$set", Value: bson.D{
+				primitive.E{Key: "title", Value: agreement.Title},
+				primitive.E{Key: "description", Value: agreement.Description},
+				primitive.E{Key: "participants", Value: agreement.Participants},
+				primitive.E{Key: "last_update_datetime", Value: agreement.LastUpdateDateTime},
+				primitive.E{Key: "agreement_deadline", Value: agreement.AgreementDeadline},
+				primitive.E{Key: "status", Value: agreement.Status},
+				primitive.E{Key: "tags", Value: agreement.Tags},
+				primitive.E{Key: "location", Value: agreement.Location},
+				primitive.E{Key: "updated_agreement", Value: nil},
+				primitive.E{Key: "agreement_accept", Value: agreement.AgreementAccept},
+				primitive.E{Key: "agreement_decline", Value: agreement.AgreementDecline},
+				primitive.E{Key: "public", Value: agreement.Public},
+			}}}
+		} else {
+			updater = bson.D{primitive.E{Key: "$set", Value: bson.D{
+				primitive.E{Key: "status", Value: agreement.Status},
+				primitive.E{Key: "updated_agreement", Value: agreement.UpdatedAgreement},
+				primitive.E{Key: "agreement_accept", Value: agreement.AgreementAccept},
+				primitive.E{Key: "agreement_decline", Value: agreement.AgreementDecline},
+			}}}
+		}
+
+		res := agreementColl.FindOneAndUpdate(ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+		if res.Err() != nil {
+			if res.Err().Error() == "mongo: no documents in result" {
+				logger.Error(fmt.Sprintf("No agreement found for id: %s: ", agreement.Id), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", agreement.Id))
+			}
+			logger.Error(fmt.Sprintf("agreement repository RespondAgreementChange could not FindOneAndUpdate id: %s", agreement.Id), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to delete deadline and get doc back id: %s", agreement.Id), errors.New("database error"))
+		}
+
+		var resAgreement domain.Agreement
+		decodeErr := res.Decode(&resAgreement)
+		if decodeErr != nil {
+			logger.Error("agreement repository RespondAgreementChange could not decode update doc to Agreement type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error when trying to retrieve updated document", errors.New("database error"))
+		}
+
+		// Insert Notifications
+		inserts := make([]interface{}, len(notifications))
+		for i := range notifications {
+			inserts[i] = notifications[i]
+		}
+		_, insertErr := notificationColl.InsertMany(sessCtx, inserts)
+		if insertErr != nil {
+			logger.Error("agreement repository RespondAgreementChange transaction to insert notifications failed", insertErr, context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewInternalServerError("could not insert notifications", errors.New("database error"))
+		}
+
+		return resAgreement, nil
+	}
+
+	session, err := client.StartSession()
+	if err != nil {
+		logger.Error("agreement repository RespondAgreementChange - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
+	}
+	defer session.EndSession(ctx)
+
+	res, transactionErr := session.WithTransaction(ctx, callback)
+	if transactionErr != nil {
+		logger.Error("agreement repository RespondAgreementChange - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+	}
+
+	resAgreement, ok := res.(domain.Agreement)
+	if !ok {
+		logger.Error("agreement repository RespondAgreementChange - assertion failed", fmt.Errorf("could not assert into domain.Agreement: %v", res), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db type assertion failed", errors.New("assertion error"))
+	}
+
+	logger.Info("agreement repository RespondAgreementChange finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return &resAgreement, nil
 }

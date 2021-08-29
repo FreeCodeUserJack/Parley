@@ -3,6 +3,7 @@ package controllers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -35,6 +36,7 @@ type AgreementControllerInterface interface {
 	DeleteDeadline(w http.ResponseWriter, r *http.Request)
 	SearchAgreements(w http.ResponseWriter, r *http.Request)
 	ActionAndNotification(w http.ResponseWriter, r *http.Request)
+	RespondAgreementChange(w http.ResponseWriter, r *http.Request)
 }
 
 type agreementsResource struct {
@@ -47,6 +49,7 @@ func (a agreementsResource) Routes() chi.Router {
 	router.Post("/new", a.NewAgreement)
 	router.Get("/search", a.SearchAgreements)
 	router.Post("/actionAndNotification", a.ActionAndNotification)
+	router.Put("/respondChange", a.RespondAgreementChange)
 
 	router.Route("/{agreementId}", func(r chi.Router) {
 		r.Delete("/", a.CloseAgreement)
@@ -74,6 +77,8 @@ func (a agreementsResource) NewAgreement(w http.ResponseWriter, r *http.Request)
 		http_utils.ResponseError(w, restErr)
 		return
 	}
+
+	// fmt.Printf("%+v\n", reqAgreement)
 
 	result, serviceErr := a.AgreementService.NewAgreement(r.Context(), reqAgreement)
 	if serviceErr != nil {
@@ -398,6 +403,32 @@ func (a agreementsResource) ActionAndNotification(w http.ResponseWriter, r *http
 
 	logger.Info("agreement controller ActionAndNotification about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
 	http_utils.ResponseJSON(w, http.StatusCreated, notificationRes)
+}
+
+func (a agreementsResource) RespondAgreementChange(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller ActionAndNotification about to read body", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	var notification domain.Notification
+
+	defer r.Body.Close()
+	jsonErr := json.NewDecoder(r.Body).Decode(&notification)
+	if jsonErr != nil {
+		restErr := rest_errors.NewBadRequestError("invalid json body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+
+	fmt.Printf("incoming notification: %+v\n", notification)
+
+	res, serviceErr := a.AgreementService.RespondAgreementChange(r.Context(), notification)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("agreement controller ActionAndNotification about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, res)
 }
 
 // func concatString(input []string) string {
