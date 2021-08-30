@@ -18,3 +18,13 @@ Request
   "response": "commit",
   "user_id": "user_000"
 }
+
+// commit - change
+{
+  "_id": "c3dedbf1-5189-4ff5-879c-00b98eade71d",
+  "agreement_id": "f05570b8-0dba-47d6-ae92-60a08d357bac",
+  "type": "update",
+  "action": "change",
+  "response": "commit",
+  "user_id": "user_000"
+}

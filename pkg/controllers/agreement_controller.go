@@ -338,6 +338,12 @@ func (a agreementsResource) SetDeadline(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if result == nil {
+		// collaborative return
+		http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "sent notifications for deadline change confirmation"})
+		return
+	}
+
 	logger.Info("agreement controller SetDeadline about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
 	http_utils.ResponseJSON(w, http.StatusCreated, result)
 }
@@ -375,6 +381,12 @@ func (a agreementsResource) DeleteDeadline(w http.ResponseWriter, r *http.Reques
 	returnedAgreement, serviceErr := a.AgreementService.DeleteDeadline(r.Context(), agreementId, typeKey, typeVal)
 	if serviceErr != nil {
 		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	if returnedAgreement == nil {
+		// collaborative return
+		http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "sent notifications for deadline change confirmation"})
 		return
 	}
 

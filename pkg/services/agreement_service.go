@@ -181,7 +181,7 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey,
 				Action:           "updateClose",
 			})
 		}
-		return a.AgreementRepository.CloseAgreementNotifications(ctx, *agreement, notifications)
+		return a.AgreementRepository.CollaborativeUpdateAgreementNotifications(ctx, *agreement, notifications)
 	}
 }
 
@@ -424,11 +424,13 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 	}
 
 	// Archive Changes
-	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
-	if archiveErr == nil {
-		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
-		}()
+	if typeVal != "collaborative" {
+		agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
+		if archiveErr == nil {
+			go func() {
+				a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+			}()
+		}
 	}
 
 	// Check Nullable fields
@@ -471,8 +473,42 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 			})
 		}
 		return a.AgreementRepository.SetDeadlineDirected(ctx, agreementId, deadline, notifications)
-	} else { // TODO collaborative
-		return nil, nil
+	} else { // collaborative
+		agreement.AgreementDeadline = deadline
+		updatedAgreement := *agreement
+		updatedAgreement.Status = "active"
+		agreement.Status = "awaitingConfirmation"
+		agreement.UpdatedAgreement = &updatedAgreement
+		agreement.UpdatedAgreement.UpdatedAgreement = nil
+
+		notifications := make([]domain.Notification, 0)
+		for i := 0; i < len(agreement.Participants); i++ {
+			if agreement.Participants[i] == agreement.CreatedBy {
+				continue
+			}
+
+			notifications = append(notifications, domain.Notification{
+				Id:               uuid.NewString(),
+				Title:            fmt.Sprintf("%s wants to change '%s' agreement deadline, please respond", agreement.CreatorName, agreement.Title),
+				Message:          "",
+				CreateDateTime:   time.Now().UTC(),
+				Status:           "new",
+				UserId:           agreement.Participants[i],
+				ContactId:        agreement.CreatedBy,
+				ContactFirstName: agreement.CreatorName,
+				AgreementId:      agreement.Id,
+				AgreementTitle:   agreement.Title,
+				Response:         "",
+				Type:             "requires_response",
+				Action:           "update",
+			})
+		}
+		_, err := a.AgreementRepository.CollaborativeUpdateAgreementNotifications(ctx, *agreement, notifications)
+		if err != nil {
+			return nil, err
+		} else {
+			return nil, nil
+		}
 	}
 }
 
@@ -502,11 +538,13 @@ func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string
 	}
 
 	// Archive Changes
-	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
-	if archiveErr == nil {
-		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
-		}()
+	if typeVal != "collaborative" {
+		agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, agreementId, "modified", "agreement was modified", nil)
+		if archiveErr == nil {
+			go func() {
+				a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+			}()
+		}
 	}
 
 	logger.Info("agreement service DeleteDeadlineDirected finish", context_utils.GetTraceAndClientIds(ctx)...)
@@ -537,7 +575,41 @@ func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string
 		}
 		return a.AgreementRepository.DeleteDeadlineDirected(ctx, agreementId, notifications)
 	} else { // TODO collaborative
-		return nil, nil
+		agreement.AgreementDeadline.Status = "deleted"
+		updatedAgreement := *agreement
+		updatedAgreement.Status = "active"
+		agreement.Status = "awaitingConfirmation"
+		agreement.UpdatedAgreement = &updatedAgreement
+		agreement.UpdatedAgreement.UpdatedAgreement = nil
+
+		notifications := make([]domain.Notification, 0)
+		for i := 0; i < len(agreement.Participants); i++ {
+			if agreement.Participants[i] == agreement.CreatedBy {
+				continue
+			}
+
+			notifications = append(notifications, domain.Notification{
+				Id:               uuid.NewString(),
+				Title:            fmt.Sprintf("%s wants to delete '%s' agreement deadline, please respond", agreement.CreatorName, agreement.Title),
+				Message:          "",
+				CreateDateTime:   time.Now().UTC(),
+				Status:           "new",
+				UserId:           agreement.Participants[i],
+				ContactId:        agreement.CreatedBy,
+				ContactFirstName: agreement.CreatorName,
+				AgreementId:      agreement.Id,
+				AgreementTitle:   agreement.Title,
+				Response:         "",
+				Type:             "requires_response",
+				Action:           "update",
+			})
+		}
+		_, err := a.AgreementRepository.CollaborativeUpdateAgreementNotifications(ctx, *agreement, notifications)
+		if err != nil {
+			return nil, err
+		} else {
+			return nil, nil
+		}
 	}
 }
 

@@ -22,7 +22,7 @@ type AgreementRepositoryInterface interface {
 	NewAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
 	CloseAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	CloseAgreementDirected(context.Context, string, string, []domain.Notification) (string, rest_errors.RestError)
-	CloseAgreementNotifications(context.Context, domain.Agreement, []domain.Notification) (string, rest_errors.RestError)
+	CollaborativeUpdateAgreementNotifications(context.Context, domain.Agreement, []domain.Notification) (string, rest_errors.RestError)
 	UpdateAgreement(context.Context, domain.Agreement) (*domain.Agreement, rest_errors.RestError)
 	UpdateAgreementNotifications(context.Context, domain.Agreement, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
 	GetAgreement(context.Context, string) (*domain.Agreement, rest_errors.RestError)
@@ -162,8 +162,11 @@ func (a agreementRepository) CloseAgreementDirected(ctx context.Context, uuid st
 	return uuid, nil
 }
 
-func (a agreementRepository) CloseAgreementNotifications(ctx context.Context, agreement domain.Agreement, notifications []domain.Notification) (string, rest_errors.RestError) {
+// To Update Agreement via update, close, set/delete deadline and send notifications for collaborative type agreements
+func (a agreementRepository) CollaborativeUpdateAgreementNotifications(ctx context.Context, agreement domain.Agreement, notifications []domain.Notification) (string, rest_errors.RestError) {
 	logger.Info("agreement repository CloseAgreementNotifications start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	fmt.Printf("%+v\n\n", agreement)
 
 	client, mongoErr := db.GetMongoClient()
 	if mongoErr != nil {
