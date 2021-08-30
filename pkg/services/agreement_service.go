@@ -91,7 +91,7 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey,
 	typeKey = strings.TrimSpace(html.EscapeString(typeKey))
 	typeVal = strings.TrimSpace(html.EscapeString(typeVal))
 
-	if completionKey != "completion" || completionVal != "finished" && completionVal != "retired" {
+	if completionKey != "completion" || completionVal != "completed" && completionVal != "retired" {
 		logger.Error(fmt.Sprintf("agreement service CloseAgreement - improper completion key/val: %s %s %s", id, completionKey, completionVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
 		return "", rest_errors.NewBadRequestError("improper completion key/val: " + completionKey + "/" + completionVal)
 	}
@@ -109,17 +109,19 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey,
 	}
 
 	// Check if agreement already closed
-	if agreement.Status == "retired" || agreement.Status == "finished" {
+	if agreement.Status == "retired" || agreement.Status == "completed" {
 		logger.Error(fmt.Sprintf("agreement service CloseAgreement - agreement already closed: %v", agreement), getErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return "", rest_errors.NewBadRequestError("agreement already closed: " + id)
 	}
 
 	// Archive Agreement
-	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, id, "deleted", "agreement was closed", nil)
-	if archiveErr == nil {
-		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
-		}()
+	if typeVal != "collaborative" {
+		agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, id, "deleted", "agreement was closed", nil)
+		if archiveErr == nil {
+			go func() {
+				a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+			}()
+		}
 	}
 
 	logger.Info("agreement service CloseAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
@@ -145,13 +147,41 @@ func (a agreementService) CloseAgreement(ctx context.Context, id, completionKey,
 				AgreementTitle:   agreement.Title,
 				Response:         "",
 				Type:             "notifyFinish",
-				Action:           "close",
+				Action:           "updateFinish",
 			})
 		}
 		return a.AgreementRepository.CloseAgreementDirected(ctx, id, completionVal, notifications)
 	} else {
 		// TODO for collborative notification / put in awaiting collaboration + new agreement state
-		return "", nil
+		updatedAgreement := *agreement
+		updatedAgreement.Status = completionVal
+		agreement.Status = "awaitingConfirmation"
+		agreement.UpdatedAgreement = &updatedAgreement
+		agreement.UpdatedAgreement.UpdatedAgreement = nil
+
+		notifications := make([]domain.Notification, 0)
+		for i := 0; i < len(agreement.Participants); i++ {
+			if agreement.Participants[i] == agreement.CreatedBy {
+				continue
+			}
+
+			notifications = append(notifications, domain.Notification{
+				Id:               uuid.NewString(),
+				Title:            fmt.Sprintf("%s wants to %s '%s' agreement, please respond", agreement.CreatorName, completionVal, agreement.Title),
+				Message:          "",
+				CreateDateTime:   time.Now().UTC(),
+				Status:           "new",
+				UserId:           agreement.Participants[i],
+				ContactId:        agreement.CreatedBy,
+				ContactFirstName: agreement.CreatorName,
+				AgreementId:      agreement.Id,
+				AgreementTitle:   agreement.Title,
+				Response:         "",
+				Type:             "requires_response",
+				Action:           "updateClose",
+			})
+		}
+		return a.AgreementRepository.CloseAgreementNotifications(ctx, *agreement, notifications)
 	}
 }
 
@@ -180,7 +210,7 @@ func (a agreementService) UpdateAgreement(ctx context.Context, agreement domain.
 	}
 
 	// Check if agreement already closed
-	if agreement.Status == "retired" || agreement.Status == "finished" {
+	if agreement.Status == "retired" || agreement.Status == "completed" {
 		logger.Error(fmt.Sprintf("agreement service UpdateAgreement - agreement already closed: %v", agreement), getErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewBadRequestError("agreement already closed: " + agreement.Id)
 	}
@@ -388,7 +418,7 @@ func (a agreementService) SetDeadline(ctx context.Context, agreementId string, d
 	}
 
 	// Check if agreement already closed
-	if agreement.Status == "retired" || agreement.Status == "finished" {
+	if agreement.Status == "retired" || agreement.Status == "completed" {
 		logger.Error(fmt.Sprintf("agreement service SetDeadline - agreement already closed: %v", agreement), getErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewBadRequestError("agreement already closed: " + agreementId)
 	}
@@ -466,7 +496,7 @@ func (a agreementService) DeleteDeadline(ctx context.Context, agreementId string
 	}
 
 	// Check if agreement already closed
-	if agreement.Status == "retired" || agreement.Status == "finished" {
+	if agreement.Status == "retired" || agreement.Status == "completed" {
 		logger.Error(fmt.Sprintf("agreement service DeleteDeadline - agreement already closed: %v", agreement), getErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewBadRequestError("agreement already closed: " + agreementId)
 	}
@@ -657,6 +687,12 @@ func (a agreementService) RespondAgreementChange(ctx context.Context, notificati
 		return nil, getErr
 	}
 
+	// check if agreement is awaiting confirmation
+	if agreement.Status != "awaitingConfirmation" {
+		logger.Error("agreement service RespondAgreementChange - agreement is not waiting for responses", fmt.Errorf("%+v", agreement), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("agreement is not waiting for a response")
+	}
+
 	agreement.LastUpdateDateTime = time.Now().UTC()
 	if agreement.UpdatedAgreement != nil {
 		agreement.UpdatedAgreement.LastUpdateDateTime = time.Now().UTC()
@@ -713,10 +749,13 @@ func (a agreementService) RespondAgreementChange(ctx context.Context, notificati
 
 		if notification.Action == "change" {
 			if notification.Type == "complete" || notification.Type == "retire" {
-				agreement.UpdatedAgreement.Status = notification.Action
+				fmt.Println("changing the status of the updated agreement to be: " + notification.Type + "d")
+				agreement.UpdatedAgreement.Status = notification.Type + "d"
+			} else { // just a change so back to active
+				agreement.UpdatedAgreement.Status = "active"
 			}
 			// fmt.Printf("%+v\n", *agreement.UpdatedAgreement)
-			agreement.UpdatedAgreement.Status = "active"
+			fmt.Println(agreement.UpdatedAgreement.Status)
 			return a.AgreementRepository.RespondAgreementChange(ctx, *agreement.UpdatedAgreement, notifications)
 		} else { // notification.Response == "revert"
 			agreement.Status = "active"

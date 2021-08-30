@@ -136,7 +136,7 @@ func (a agreementsResource) CloseAgreement(w http.ResponseWriter, r *http.Reques
 	}
 
 	logger.Info("agreement controller CloseAgreement about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
-	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "document deleted", Id: uuid})
+	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "notifications sent to close agreement id: ", Id: uuid})
 }
 
 // UpdateAgreement pass in id via url param, then body containing fields that should be updated
