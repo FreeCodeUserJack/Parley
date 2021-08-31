@@ -28,7 +28,8 @@ type AgreementServiceInterface interface {
 	DeleteDeadline(context.Context, string, string, string) (*domain.Agreement, rest_errors.RestError)
 	ActionAndNotification(context.Context, domain.Notification, string, string) (*domain.Notification, rest_errors.RestError)
 	RespondAgreementChange(context.Context, domain.Notification) (*domain.Agreement, rest_errors.RestError)
-	GetAgreementEventResponses(context.Context, string, []string) ([]domain.EventResponse, rest_errors.RestError)
+	GetAgreementEventResponses(context.Context, string) ([]domain.EventResponse, rest_errors.RestError)
+	InviteUsersToEvent(context.Context, string, []string) (string, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -681,17 +682,6 @@ func (a agreementService) ActionAndNotification(ctx context.Context, notificatio
 		return nil, getErr
 	}
 
-	// Check if accept invite/request/removal/leave
-	// if notification.Action == "acceptInvite" || notification.Action == "acceptRequest" || notification.Action == "acceptRemove" || notification.Action == "acceptLeave" {
-	// // need to check if there is new notification to un-do the invite/request/removal/leave ... complicated, b/c how to tell if notification is for this one or if it comes from previous invite/uninvite?
-	// }
-
-	// if notification.Action == "declineInvite" || notification.Action == "declineRequest" || notification.Action == "declineRemove" || notification.Action == "declineLeave" {
-
-	// }
-
-	// Check if uninvite/unrequest/unremove/unleave
-
 	// Archive Changes
 	if typeVal != "collaborative" {
 		agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, notification.AgreementId, "modified", "agreement was modified", nil)
@@ -909,12 +899,75 @@ func (a agreementService) RespondAgreementChange(ctx context.Context, notificati
 	}
 }
 
-func (a agreementService) GetAgreementEventResponses(ctx context.Context, agreementId string, uuids []string) ([]domain.EventResponse, rest_errors.RestError) {
+func (a agreementService) GetAgreementEventResponses(ctx context.Context, agreementId string) ([]domain.EventResponse, rest_errors.RestError) {
 	logger.Info("agreement service GetAgreementEventResponses start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize
-	uuids = domain.SanitizeStringSlice(uuids)
+	agreementId = strings.TrimSpace(html.EscapeString(agreementId))
 
 	logger.Info("agreement service GetAgreementEventResponses finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return a.AgreementRepository.GetAgreementEventResponses(ctx, agreementId, uuids)
+	return a.AgreementRepository.GetAgreementEventResponses(ctx, agreementId)
+}
+
+func (a agreementService) InviteUsersToEvent(ctx context.Context, agreementId string, uuids []string) (string, rest_errors.RestError) {
+	logger.Info("agreement service InviteUsersToEvent start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize inputs
+	agreementId = strings.TrimSpace(html.EscapeString(agreementId))
+	uuids = domain.SanitizeStringSlice(uuids)
+
+	// Get Current Agreement
+	agreement, getErr := a.GetAgreement(ctx, agreementId)
+	if getErr != nil {
+		logger.Error("agreement service InviteUsersToEvent - could not get agreement", getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", getErr
+	}
+
+	var newUsers []string
+
+	for _, id := range uuids {
+		if isInSlice(id, agreement.InvitedParticipants) {
+			continue
+		}
+		newUsers = append(newUsers, id)
+		agreement.InvitedParticipants = append(agreement.InvitedParticipants, id)
+	}
+
+	// check if no new userIds to invite
+	if len(newUsers) == 0 {
+		logger.Error("agreement service InviteUsersToEvent - no new users to invite", fmt.Errorf("incoming userIds: %v does not contain new ids, agreement: %+v", uuids, agreement), context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewBadRequestError("all users in request are already invited")
+	}
+
+	notifications := make([]domain.Notification, 0)
+	for i := 0; i < len(newUsers); i++ {
+		notifications = append(notifications, domain.Notification{
+			Id:               uuid.NewString(),
+			Title:            fmt.Sprintf("%s invites you to '%s' agreement, please respond", agreement.CreatorName, agreement.Title),
+			Message:          "",
+			CreateDateTime:   time.Now().UTC(),
+			Status:           "new",
+			UserId:           uuids[i],
+			ContactId:        agreement.CreatedBy,
+			ContactFirstName: agreement.CreatorName,
+			AgreementId:      agreement.Id,
+			AgreementTitle:   agreement.Title,
+			Response:         "",
+			Type:             "requires_response",
+			Action:           "eventInvite",
+		})
+	}
+
+	logger.Info("agreement service InviteUsersToEvent finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.InviteUsersToEvent(ctx, *agreement, notifications)
+}
+
+func isInSlice(input string, arr []string) bool {
+	for _, el := range arr {
+		if el == input {
+			return true
+		}
+	}
+
+	return false
 }

@@ -3,7 +3,6 @@ package controllers
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -38,6 +37,7 @@ type AgreementControllerInterface interface {
 	ActionAndNotification(w http.ResponseWriter, r *http.Request)
 	RespondAgreementChange(w http.ResponseWriter, r *http.Request)
 	GetAgreementEventResponses(w http.ResponseWriter, r *http.Request)
+	InviteUsersToEvent(w http.ResponseWriter, r *http.Request)
 }
 
 type agreementsResource struct {
@@ -61,6 +61,7 @@ func (a agreementsResource) Routes() chi.Router {
 		r.Put("/deadline", a.SetDeadline)
 		r.Delete("/deadline", a.DeleteDeadline)
 		r.Get("/eventResponses", a.GetAgreementEventResponses)
+		r.Post("/inviteEventUsers", a.InviteUsersToEvent)
 	})
 
 	return router
@@ -452,7 +453,7 @@ func (a agreementsResource) RespondAgreementChange(w http.ResponseWriter, r *htt
 		return
 	}
 
-	fmt.Printf("incoming notification: %+v\n", notification)
+	// fmt.Printf("incoming notification: %+v\n", notification)
 
 	res, serviceErr := a.AgreementService.RespondAgreementChange(r.Context(), notification)
 	if serviceErr != nil {
@@ -475,11 +476,32 @@ func (a agreementsResource) GetAgreementEventResponses(w http.ResponseWriter, r 
 		return
 	}
 
-	logger.Info("agreement controller GetAgreementEventResponses about to read body", context_utils.GetTraceAndClientIds(r.Context())...)
+	res, serviceErr := a.AgreementService.GetAgreementEventResponses(r.Context(), agreementId)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
 
-	defer r.Body.Close()
+	logger.Info("agreement controller GetAgreementEventResponses about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, res)
+}
+
+func (a agreementsResource) InviteUsersToEvent(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller InviteUsersToEvent about to get agreementId", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	agreementId := chi.URLParam(r, "agreementId")
+	if agreementId == "" {
+		reqErr := rest_errors.NewBadRequestError("missing agreementId")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	logger.Info("agreement controller InviteUsersToEvent about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
+
 	var uuids dto.UuidsRequest
 
+	defer r.Body.Close()
 	jsonErr := json.NewDecoder(r.Body).Decode(&uuids)
 	if jsonErr != nil {
 		restErr := rest_errors.NewBadRequestError("invalid json body")
@@ -488,14 +510,14 @@ func (a agreementsResource) GetAgreementEventResponses(w http.ResponseWriter, r 
 		return
 	}
 
-	res, serviceErr := a.AgreementService.GetAgreementEventResponses(r.Context(), agreementId, uuids.Payload)
+	res, serviceErr := a.AgreementService.InviteUsersToEvent(r.Context(), agreementId, uuids.Payload)
 	if serviceErr != nil {
 		http_utils.ResponseError(w, serviceErr)
 		return
 	}
 
-	logger.Info("agreement controller GetAgreementEventResponses about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
-	http_utils.ResponseJSON(w, http.StatusOK, res)
+	logger.Info("agreement controller InviteUsersToEvent about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "Invited users for agreement id:", Id: res})
 }
 
 // func concatString(input []string) string {
