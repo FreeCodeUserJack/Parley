@@ -31,6 +31,7 @@ type Agreement struct {
 	UpdatedAgreement           *Agreement `bson:"updated_agreement" json:"upated_agreement"`
 	AgreementAccept            []string   `bson:"agreement_accept" json:"agreement_accept"`
 	AgreementDecline           []string   `bson:"agreement_decline" json:"agreement_decline"`
+	EventResponses             []string   `bson:"event_responses" json:"event_responses"`
 }
 
 func (a Agreement) MarshalJSON() ([]byte, error) {
@@ -118,6 +119,7 @@ func (a *Agreement) Sanitize() {
 	a.Description = removeAngularBrackets(a.Description)
 	a.AgreementAccept = SanitizeStringSlice(a.AgreementAccept)
 	a.AgreementDecline = SanitizeStringSlice(a.AgreementDecline)
+	a.EventResponses = SanitizeStringSlice(a.EventResponses)
 }
 
 func SanitizeStringSlice(input []string) []string {

@@ -23,6 +23,7 @@ const (
 	envNotificationCollectionName     = "MONGODB_NOTIFICATION_COLLECTION_NAME"
 	envTokenCollectionName            = "MONGODB_TOKEN_COLLECTION_NAME"
 	envReplicaSetName                 = "MONGODB_REPLICA_SET_NAME"
+	envEventResponsesCollectionName   = "MONGODB_EVENT_RESPONSE_COLLECTION_NAME"
 )
 
 var (
@@ -34,6 +35,7 @@ var (
 	NotificationCollectionName     = "notifications"
 	TokenCollectionName            = "tokens"
 	ReplicaSetName                 = "parleyset"
+	EventResponseCollectionName    = "event_responses"
 )
 
 func init() {
@@ -67,6 +69,10 @@ func init() {
 
 	if replicaname := os.Getenv(envReplicaSetName); replicaname != "" {
 		ReplicaSetName = replicaname
+	}
+
+	if eventresponsescolname := os.Getenv(envEventResponsesCollectionName); eventresponsescolname != "" {
+		EventResponseCollectionName = eventresponsescolname
 	}
 }
 

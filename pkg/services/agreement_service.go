@@ -26,8 +26,9 @@ type AgreementServiceInterface interface {
 	RemoveUserFromAgreement(context.Context, string, string) (string, rest_errors.RestError)
 	SetDeadline(context.Context, string, domain.Deadline, string, string) (*domain.Agreement, rest_errors.RestError)
 	DeleteDeadline(context.Context, string, string, string) (*domain.Agreement, rest_errors.RestError)
-	ActionAndNotification(context.Context, domain.Notification) (*domain.Notification, rest_errors.RestError)
+	ActionAndNotification(context.Context, domain.Notification, string, string) (*domain.Notification, rest_errors.RestError)
 	RespondAgreementChange(context.Context, domain.Notification) (*domain.Agreement, rest_errors.RestError)
+	GetAgreementEventResponses(context.Context, string, []string) ([]domain.EventResponse, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -56,8 +57,8 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 	agreement.Sanitize()
 
 	// Add UUID
-	uuid := uuid.NewString()
-	agreement.Id = uuid
+	auuid := uuid.NewString()
+	agreement.Id = auuid
 
 	// Add CreateTime/UpdateTime
 	currTime := time.Now().UTC()
@@ -69,15 +70,40 @@ func (a agreementService) NewAgreement(ctx context.Context, agreement domain.Agr
 		agreement.AgreementDeadline.NotifyDateTime = agreement.AgreementDeadline.DeadlineDateTime.Add(time.Hour * -24).UTC()
 	}
 
-	// Initialize 4 slices
-	agreement.InvitedParticipants = []string{}
+	// Initialize slices
+	if agreement.Type != "event" {
+		agreement.InvitedParticipants = []string{}
+	}
+
 	agreement.RequestedParticipants = []string{}
 	agreement.PendingRemovalParticipants = []string{}
 	agreement.PendingLeaveParticipants = []string{}
 	agreement.AgreementAccept = []string{}
 	agreement.AgreementDecline = []string{}
+	agreement.EventResponses = []string{}
 
 	logger.Info("agreement service NewAgreement end", context_utils.GetTraceAndClientIds(ctx)...)
+	if agreement.Type == "event" {
+		notifications := make([]domain.Notification, 0)
+		for i := 0; i < len(agreement.InvitedParticipants); i++ {
+			notifications = append(notifications, domain.Notification{
+				Id:               uuid.NewString(),
+				Title:            fmt.Sprintf("%s invites you to '%s' agreement", agreement.CreatorName, agreement.Title),
+				Message:          "",
+				CreateDateTime:   time.Now().UTC(),
+				Status:           "new",
+				UserId:           agreement.InvitedParticipants[i],
+				ContactId:        agreement.CreatedBy,
+				ContactFirstName: agreement.CreatorName,
+				AgreementId:      agreement.Id,
+				AgreementTitle:   agreement.Title,
+				Response:         "",
+				Type:             "notifyEventInvite",
+				Action:           "requires_response",
+			})
+		}
+		return a.AgreementRepository.NewEventAgreement(ctx, agreement, notifications)
+	}
 	return a.AgreementRepository.NewAgreement(ctx, agreement)
 }
 
@@ -636,11 +662,24 @@ func archiveAgreementHelper(ctx context.Context, agreementRepo repository.Agreem
 	return &agreementArchive, nil
 }
 
-func (a agreementService) ActionAndNotification(ctx context.Context, notification domain.Notification) (*domain.Notification, rest_errors.RestError) {
+func (a agreementService) ActionAndNotification(ctx context.Context, notification domain.Notification, typeKey, typeVal string) (*domain.Notification, rest_errors.RestError) {
 	logger.Info("agreement service ActionAndNotification start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize action string and notification instance
 	notification.Sanitize()
+	typeKey = strings.TrimSpace(html.EscapeString(typeKey))
+	typeVal = strings.TrimSpace(html.EscapeString(typeVal))
+
+	if typeKey != "type" || typeVal != "solo" && typeVal != "directed" && typeVal != "collaborative" {
+		logger.Error(fmt.Sprintf("agreement service ActionAndNotification - improper type key/val: %s %s", typeKey, typeVal), errors.New("key/value are incorrect"), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("improper type key/val: " + typeKey + "/" + typeVal)
+	}
+
+	// Get Existing Agreement
+	agreement, getErr := a.GetAgreement(ctx, notification.AgreementId)
+	if getErr != nil {
+		return nil, getErr
+	}
 
 	// Check if accept invite/request/removal/leave
 	// if notification.Action == "acceptInvite" || notification.Action == "acceptRequest" || notification.Action == "acceptRemove" || notification.Action == "acceptLeave" {
@@ -654,18 +693,19 @@ func (a agreementService) ActionAndNotification(ctx context.Context, notificatio
 	// Check if uninvite/unrequest/unremove/unleave
 
 	// Archive Changes
-	agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, notification.AgreementId, "modified", "agreement was modified", nil)
-
-	// check if request to join agreement is public
-	if notification.Action == "request" && agreementArchive.AgreementData.Public == "false" {
-		logger.Error("agreement service ActionAndNotification - request to join on a non public agreement", fmt.Errorf("agreement to request is not public: %+v", agreementArchive.AgreementData), context_utils.GetTraceAndClientIds(ctx)...)
-		return nil, rest_errors.NewBadRequestError("agreement is not public: " + notification.AgreementId)
+	if typeVal != "collaborative" {
+		agreementArchive, archiveErr := archiveAgreementHelper(ctx, a.AgreementRepository, a.AgreementArchiveRepository, notification.AgreementId, "modified", "agreement was modified", nil)
+		if archiveErr == nil {
+			go func() {
+				a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
+			}()
+		}
 	}
 
-	if archiveErr == nil {
-		go func() {
-			a.AgreementArchiveRepository.ArchiveAgreement(ctx, *agreementArchive)
-		}()
+	// check if request to join agreement is public
+	if notification.Action == "request" && agreement.Public == "false" {
+		logger.Error("agreement service ActionAndNotification - request to join on a non public agreement", fmt.Errorf("agreement to request is not public: %+v", agreement), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("agreement is not public: " + notification.AgreementId)
 	}
 
 	// Set uuid
@@ -699,7 +739,36 @@ func (a agreementService) ActionAndNotification(ctx context.Context, notificatio
 	// }
 
 	logger.Info("agreement service ActionAndNotification finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return a.AgreementRepository.ActionAndNotification(ctx, actionInputs[1:], notification)
+	// if typeVal == "solo" || typeVal == "directed" {
+	return a.AgreementRepository.ActionAndNotification(ctx, actionInputs[2:], notification)
+	// } else if typeVal == "collaborative" { // collaborative
+	// 	if notification.Action = ""
+
+	// 	notifications := make([]domain.Notification, 0)
+	// 	for i := 0; i < len(agreement.Participants); i++ {
+	// 		if agreement.Participants[i] == notification.ContactId {
+	// 			continue
+	// 		}
+
+	// 		notifications = append(notifications, domain.Notification{
+	// 			Id:               uuid.NewString(),
+	// 			Title:            fmt.Sprintf(actionInputs[1], notification.ContactFirstName, notification.UserFirstName, notification.AgreementTitle),
+	// 			Message:          "",
+	// 			CreateDateTime:   time.Now().UTC(),
+	// 			Status:           "new",
+	// 			UserId:           agreement.Participants[i],
+	// 			ContactId:        agreement.CreatedBy,
+	// 			ContactFirstName: agreement.CreatorName,
+	// 			AgreementId:      agreement.Id,
+	// 			AgreementTitle:   agreement.Title,
+	// 			Response:         "",
+	// 			Type:             "notifyUpdate",
+	// 			Action:           "update",
+	// 		})
+	// 	}
+
+	// 	return a.AgreementRepository.ActionAndNotifyAll(ctx, actionInputs[2:], notifications)
+	// }
 }
 
 func getActionAndNotificationInputs(action string) []string {
@@ -719,22 +788,22 @@ var actionCodes map[string][]string
 
 func init() {
 	actionCodes = map[string][]string{
-		"invite": {"%s invites you to agreement: %s", "$push", "invited_participants"},
+		"invite": {"%s invites you to agreement: %s", "%s invited %s to '%s' agreement", "$push", "invited_participants"},
 		// "uninvite": {"%s uninvites you to agreement: %s", "$pull", "invited_participants"},
-		"acceptInvite":     {"%s accepted your invite to agreement: %s", "$pull", "invited_participants", "$push", "participants"},
-		"declineInvite":    {"%s declined your invite to agreement: %s", "$pull", "invited_participants"},
-		"requestAgreement": {"%s requests you join agreement: %s", "$push", "requested_participants"},
+		"acceptInvite":     {"%s accepted your invite to agreement: %s", "%s accepted %s's invite to agreement %s", "$pull", "invited_participants", "$push", "participants"},
+		"declineInvite":    {"%s declined your invite to agreement: %s", "%s declined %s's invite to agreement %s", "$pull", "invited_participants"},
+		"requestAgreement": {"%s requests you join agreement: %s", "%s requested %s to join '%s' agreement", "$push", "requested_participants"},
 		// "unrequestAgreement": {"%s unrequested you join agreement: %s", "$pull", "requested_participants"},
-		"acceptRequest":  {"%s accepted your request to agreement: %s", "$pull", "requested_participants", "$push", "participants"},
-		"declineRequest": {"%s declined your request to agreement: %s", "$pull", "requested_participants"},
-		"remove":         {"%s requests to remove you from agreement: %s", "$push", "pending_removal_participants"},
+		"acceptRequest":  {"%s accepted your request to agreement: %s", "%s accepted %s's request to '%s' agreement", "$pull", "requested_participants", "$push", "participants"},
+		"declineRequest": {"%s declined your request to agreement: %s", "%s declined %s's request to '%s' agreement", "$pull", "requested_participants"},
+		"remove":         {"%s requests to remove you from agreement: %s", "%s requests to remove %s from '%s' agreement", "$push", "pending_removal_participants"},
 		// "unremove": {"%s unrequests to remove you from agreement: %s", "$pull", "pending_removal_participants"},
-		"acceptRemove":  {"%s accepts your removal request for agreement: %s", "$pull", "pending_removal_participants", "$pull", "participants"},
-		"declineRemove": {"%s declines your removal request for agreement: %s", "$pull", "pending_removal_participants"},
-		"leave":         {"%s wants to leave your agreement: %s", "$push", "pending_leave_participants"},
+		"acceptRemove":  {"%s accepts your removal request for agreement: %s", "%s accepted %s's removal request for '%s' agreement", "$pull", "pending_removal_participants", "$pull", "participants"},
+		"declineRemove": {"%s declines your removal request for agreement: %s", "%s declined %s's removal request for '%s' agreement", "$pull", "pending_removal_participants"},
+		"leave":         {"%s wants to leave your agreement: %s", "%s wants to leave %s's '%s' agreement", "$push", "pending_leave_participants"},
 		// "unleave": {"%s unwants to leave your to agreement: %s", "$pull", "pending_leave_participants"},
-		"acceptLeave":  {"%s accepts your request to leave agreement: %s", "$pull", "pending_leave_participants", "$pull", "participants"},
-		"declineLeave": {"%s declined your request to leave agreement: %s", "$pull", "pending_leave_participants"},
+		"acceptLeave":  {"%s accepts your request to leave agreement: %s", "%s accepted %s's request to leave '%s' agreement", "$pull", "pending_leave_participants", "$pull", "participants"},
+		"declineLeave": {"%s declined your request to leave agreement: %s", "%s accepted %s's request to leave '%s' agreement", "$pull", "pending_leave_participants"},
 	}
 
 	// fmt.Printf("%v\n", actionCodes)
@@ -838,4 +907,14 @@ func (a agreementService) RespondAgreementChange(ctx context.Context, notificati
 		logger.Error("agreement service RespondAgreementChange - invalid response value: "+notification.Response, errors.New("respond value for notification not valid"), context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewBadRequestError("notification response value is invalid: " + notification.Response)
 	}
+}
+
+func (a agreementService) GetAgreementEventResponses(ctx context.Context, agreementId string, uuids []string) ([]domain.EventResponse, rest_errors.RestError) {
+	logger.Info("agreement service GetAgreementEventResponses start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize
+	uuids = domain.SanitizeStringSlice(uuids)
+
+	logger.Info("agreement service GetAgreementEventResponses finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.GetAgreementEventResponses(ctx, agreementId, uuids)
 }

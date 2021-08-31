@@ -14,9 +14,10 @@ type Notification struct {
 	Title            string    `bson:"title" json:"title"`
 	Message          string    `bson:"message" json:"message"`
 	CreateDateTime   time.Time `bson:"create_datetime" json:"-"`
-	ReadDateTime     time.Time `bson:"read_datetime" json:"-"`       // set when either dismissed or responded
-	Status           string    `bson:"status" json:"status"`         // new or old
-	UserId           string    `bson:"user_id" json:"user_id"`       // who the notification is for
+	ReadDateTime     time.Time `bson:"read_datetime" json:"-"` // set when either dismissed or responded
+	Status           string    `bson:"status" json:"status"`   // new or old
+	UserId           string    `bson:"user_id" json:"user_id"` // who the notification is for
+	UserFirstName    string    `bson:"user_first_name" json:"user_first_name"`
 	ContactId        string    `bson:"contact_id" json:"contact_id"` // who is sending the notification
 	ContactFirstName string    `bson:"contact_first_name" json:"contact_first_name"`
 	AgreementId      string    `bson:"agreement_id" json:"agreement_id"`
@@ -73,6 +74,7 @@ func (n *Notification) Sanitize() {
 	n.Title = strings.TrimSpace(html.EscapeString(n.Title))
 	n.Type = strings.TrimSpace(html.EscapeString(n.Type))
 	n.UserId = strings.TrimSpace(html.EscapeString(n.UserId))
+	n.UserFirstName = strings.TrimSpace(html.EscapeString(n.UserFirstName))
 }
 
 func (n Notification) Validate() bool {

@@ -3,6 +3,7 @@ Request
   "message": "join my agreement!",
   "status": "new",
   "user_id": "user_321",
+  "user_first_name": "Jack",
   "contact_id": "user_123",
   "agreement_id": "7ac9d03e-751b-4122-8163-6006caacdc3a",
   "contact_first_name": "John",

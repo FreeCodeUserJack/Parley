@@ -37,6 +37,7 @@ type AgreementControllerInterface interface {
 	SearchAgreements(w http.ResponseWriter, r *http.Request)
 	ActionAndNotification(w http.ResponseWriter, r *http.Request)
 	RespondAgreementChange(w http.ResponseWriter, r *http.Request)
+	GetAgreementEventResponses(w http.ResponseWriter, r *http.Request)
 }
 
 type agreementsResource struct {
@@ -59,6 +60,7 @@ func (a agreementsResource) Routes() chi.Router {
 		r.Delete("/friend/{friendId}", a.RemoveUserFromAgreement)
 		r.Put("/deadline", a.SetDeadline)
 		r.Delete("/deadline", a.DeleteDeadline)
+		r.Get("/eventResponses", a.GetAgreementEventResponses)
 	})
 
 	return router
@@ -395,6 +397,25 @@ func (a agreementsResource) DeleteDeadline(w http.ResponseWriter, r *http.Reques
 }
 
 func (a agreementsResource) ActionAndNotification(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller ActionAndNotification about to read query params", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	if !strings.Contains(r.URL.String(), "?") || !strings.Contains(r.URL.String(), "=") {
+		logger.Error("agreement controller ActionAndNotification - no query params: "+r.URL.String(), errors.New("missing query"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("missing query params"))
+		return
+	}
+
+	queryParams := strings.Split(strings.Split(r.URL.String(), "?")[1], "=")
+
+	if len(queryParams) != 2 {
+		logger.Error("agreement controller ActionAndNotification - expected 1 query param: "+r.URL.String(), errors.New("# query param mismatched"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("incorrect # of query params"))
+		return
+	}
+
+	typeKey := queryParams[0]
+	typeVal := queryParams[1]
+
 	logger.Info("agreement controller ActionAndNotification about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
 
 	var notification domain.Notification
@@ -407,7 +428,7 @@ func (a agreementsResource) ActionAndNotification(w http.ResponseWriter, r *http
 		return
 	}
 
-	notificationRes, serviceErr := a.AgreementService.ActionAndNotification(r.Context(), notification)
+	notificationRes, serviceErr := a.AgreementService.ActionAndNotification(r.Context(), notification, typeKey, typeVal)
 	if serviceErr != nil {
 		http_utils.ResponseError(w, serviceErr)
 		return
@@ -440,6 +461,40 @@ func (a agreementsResource) RespondAgreementChange(w http.ResponseWriter, r *htt
 	}
 
 	logger.Info("agreement controller ActionAndNotification about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, res)
+}
+
+func (a agreementsResource) GetAgreementEventResponses(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller GetAgreementEventResponses about to get agreementId", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	agreementId := chi.URLParam(r, "agreementId")
+	if agreementId == "" {
+		reqErr := rest_errors.NewBadRequestError("missing agreementId")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	logger.Info("agreement controller GetAgreementEventResponses about to read body", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	defer r.Body.Close()
+	var uuids dto.UuidsRequest
+
+	jsonErr := json.NewDecoder(r.Body).Decode(&uuids)
+	if jsonErr != nil {
+		restErr := rest_errors.NewBadRequestError("invalid json body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+
+	res, serviceErr := a.AgreementService.GetAgreementEventResponses(r.Context(), agreementId, uuids.Payload)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("agreement controller GetAgreementEventResponses about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
 	http_utils.ResponseJSON(w, http.StatusOK, res)
 }
 

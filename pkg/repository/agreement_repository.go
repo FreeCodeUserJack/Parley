@@ -36,6 +36,8 @@ type AgreementRepositoryInterface interface {
 	ActionAndNotification(context.Context, []string, domain.Notification) (*domain.Notification, rest_errors.RestError)
 	UpdateAgreementRead(context.Context, domain.Agreement, string) (*domain.Agreement, rest_errors.RestError)
 	RespondAgreementChange(context.Context, domain.Agreement, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
+	NewEventAgreement(context.Context, domain.Agreement, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
+	GetAgreementEventResponses(context.Context, string, []string) ([]domain.EventResponse, rest_errors.RestError)
 }
 
 type agreementRepository struct {
@@ -1010,4 +1012,98 @@ func (a agreementRepository) RespondAgreementChange(ctx context.Context, agreeme
 
 	logger.Info("agreement repository RespondAgreementChange finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return &resAgreement, nil
+}
+
+func (a agreementRepository) NewEventAgreement(ctx context.Context, agreement domain.Agreement, notifications []domain.Notification) (*domain.Agreement, rest_errors.RestError) {
+	logger.Info("agreement repository NewEventAgreement start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
+	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
+	notificationColl := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName, wcMajorityCollectionOpts)
+	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		_, dbErr := agreementColl.InsertOne(ctx, agreement)
+		if dbErr != nil {
+			logger.Error("agreement repository NewAgreement - error when trying to create new agreement", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error when trying to create new agreement", errors.New("database error"))
+		}
+
+		// Insert Notifications
+		inserts := make([]interface{}, len(notifications))
+		for i := range notifications {
+			inserts[i] = notifications[i]
+		}
+		_, insertErr := notificationColl.InsertMany(sessCtx, inserts)
+		if insertErr != nil {
+			logger.Error("agreement repository NewEventAgreement transaction to insert notifications failed", insertErr, context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewInternalServerError("could not insert notifications", errors.New("database error"))
+		}
+
+		return nil, nil
+	}
+
+	session, err := client.StartSession()
+	if err != nil {
+		logger.Error("agreement repository NewEventAgreement - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
+	}
+	defer session.EndSession(ctx)
+
+	_, transactionErr := session.WithTransaction(ctx, callback)
+	if transactionErr != nil {
+		logger.Error("agreement repository NewEventAgreement - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+	}
+
+	logger.Info("agreement repository NewEventAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return &agreement, nil
+}
+
+func (a agreementRepository) GetAgreementEventResponses(ctx context.Context, agreementId string, uuids []string) ([]domain.EventResponse, rest_errors.RestError) {
+	logger.Info("agreement repository GetAgreementEventResponses start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	filter := bson.D{primitive.E{Key: "agreement_id", Value: agreementId}}
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	collection := client.Database(db.DatabaseName).Collection(db.EventResponseCollectionName)
+
+	curr, dbErr := collection.Find(ctx, filter)
+	if dbErr != nil {
+		logger.Error(fmt.Sprintf("agreement repository GetAgreementEventResponses could not FindOneAndUpdate id: %s", agreementId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to get event responses for agreement id: %s", agreementId), errors.New("database error"))
+	}
+
+	var responses []domain.EventResponse
+
+	for curr.Next(ctx) {
+		var response domain.EventResponse
+		decodeErr := curr.Decode(&response)
+		if decodeErr != nil {
+			logger.Error("agreement repository GetAgreementEventResponses error decoding data to event response type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("", errors.New("database error trying to decode data to event response"))
+		}
+		responses = append(responses, response)
+	}
+
+	curr.Close(ctx)
+
+	if len(responses) == 0 {
+		logger.Error(fmt.Sprintf("No event responses found for id: %s: ", agreementId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No event responses found for id: %s", agreementId))
+	}
+
+	logger.Info("agreement repository GetAgreementEventResponses finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return responses, nil
 }
