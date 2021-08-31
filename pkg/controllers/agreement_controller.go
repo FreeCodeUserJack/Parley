@@ -38,6 +38,7 @@ type AgreementControllerInterface interface {
 	RespondAgreementChange(w http.ResponseWriter, r *http.Request)
 	GetAgreementEventResponses(w http.ResponseWriter, r *http.Request)
 	InviteUsersToEvent(w http.ResponseWriter, r *http.Request)
+	RespondEventInvite(w http.ResponseWriter, r *http.Request)
 }
 
 type agreementsResource struct {
@@ -62,6 +63,7 @@ func (a agreementsResource) Routes() chi.Router {
 		r.Delete("/deadline", a.DeleteDeadline)
 		r.Get("/eventResponses", a.GetAgreementEventResponses)
 		r.Post("/inviteEventUsers", a.InviteUsersToEvent)
+		r.Put("/respondEventInvite", a.RespondEventInvite)
 	})
 
 	return router
@@ -518,6 +520,40 @@ func (a agreementsResource) InviteUsersToEvent(w http.ResponseWriter, r *http.Re
 
 	logger.Info("agreement controller InviteUsersToEvent about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
 	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "Invited users for agreement id:", Id: res})
+}
+
+func (a agreementsResource) RespondEventInvite(w http.ResponseWriter, r *http.Request) {
+	logger.Info("agreement controller RespondEventInvite about to get agreement id", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	agreementId := chi.URLParam(r, "agreementId")
+	if agreementId == "" {
+		reqErr := rest_errors.NewBadRequestError("missing agreementId")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	logger.Info("agreement controller RespondEventInvite about to read body", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	var eventResponse domain.EventResponse
+
+	defer r.Body.Close()
+	jsonErr := json.NewDecoder(r.Body).Decode(&eventResponse)
+	if jsonErr != nil {
+		restErr := rest_errors.NewBadRequestError("invalid json body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+
+	res, serviceErr := a.AgreementService.RespondEventInvite(r.Context(), agreementId, eventResponse)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("agreement controller RespondEventInvite about to return to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, res)
 }
 
 // func concatString(input []string) string {

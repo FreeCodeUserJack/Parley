@@ -1,0 +1,21 @@
+Request
+{
+  "agreement_id": "3c1238b0-8d77-4cee-bf2d-c02715d3ac84",
+  "status": "new",
+  "message": "see you there!",
+  "response": "accept",
+  "userId": "user_999",
+  "user_first_name": "anon"
+}
+
+Response
+{
+    "_id": "a5fe25e2-e1e8-4997-9c70-d7303784d834",
+    "agreement_id": "3c1238b0-8d77-4cee-bf2d-c02715d3ac84",
+    "status": "new",
+    "message": "see you there!",
+    "response": "accept",
+    "user_id": "user_111",
+    "user_first_name": "anon",
+    "create_datetime": 1630426589
+}

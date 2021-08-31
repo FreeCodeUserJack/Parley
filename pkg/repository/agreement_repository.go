@@ -39,6 +39,7 @@ type AgreementRepositoryInterface interface {
 	NewEventAgreement(context.Context, domain.Agreement, []domain.Notification) (*domain.Agreement, rest_errors.RestError)
 	GetAgreementEventResponses(context.Context, string) ([]domain.EventResponse, rest_errors.RestError)
 	InviteUsersToEvent(context.Context, domain.Agreement, []domain.Notification) (string, rest_errors.RestError)
+	RespondEventInvite(context.Context, domain.Agreement, domain.EventResponse) (*domain.EventResponse, rest_errors.RestError)
 }
 
 type agreementRepository struct {
@@ -1171,4 +1172,66 @@ func (a agreementRepository) InviteUsersToEvent(ctx context.Context, agreement d
 
 	logger.Info("agreement repository InviteUsersToEvent finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return agreement.Id, nil
+}
+
+func (a agreementRepository) RespondEventInvite(ctx context.Context, agreement domain.Agreement, eventResponse domain.EventResponse) (*domain.EventResponse, rest_errors.RestError) {
+	logger.Info("agreement repository RespondEventInvite start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
+	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
+	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
+	eventResponseColl := client.Database(db.DatabaseName).Collection(db.EventResponseCollectionName, wcMajorityCollectionOpts)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// Update Agreement
+		filter := bson.D{primitive.E{Key: "_id", Value: agreement.Id}}
+
+		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
+			primitive.E{Key: "event_responses", Value: agreement.EventResponses},
+			primitive.E{Key: "agreement_accept", Value: agreement.AgreementAccept},
+			primitive.E{Key: "agreement_decline", Value: agreement.AgreementDecline},
+		}}}
+
+		_, dbErr := agreementColl.UpdateOne(ctx, filter, updater)
+
+		if dbErr != nil {
+			if dbErr.Error() == "mongo: no documents in result" {
+				logger.Error(fmt.Sprintf("agreement repository RespondEventInvite No agreement found for id: %s: ", agreement.Id), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", agreement.Id))
+			}
+			logger.Error(fmt.Sprintf("agreement repository RespondEventInvite could not FindOneAndUpdate id: %s", agreement.Id), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to delete deadline and get doc back id: %s", agreement.Id), errors.New("database error"))
+		}
+
+		// Insert EventResponse
+		_, eventResponseErr := eventResponseColl.InsertOne(ctx, eventResponse)
+		if eventResponseErr != nil {
+			logger.Error("agreement repository RespondEventInvite - error when trying to create new evetnResponse", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error when trying to create new eventResponse", errors.New("database error"))
+		}
+
+		return nil, nil
+	}
+
+	session, err := client.StartSession()
+	if err != nil {
+		logger.Error("agreement repository RespondEventInvite - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
+	}
+	defer session.EndSession(ctx)
+
+	_, transactionErr := session.WithTransaction(ctx, callback)
+	if transactionErr != nil {
+		logger.Error("agreement repository RespondEventInvite - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+	}
+
+	logger.Info("agreement repository RespondEventInvite finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return &eventResponse, nil
 }

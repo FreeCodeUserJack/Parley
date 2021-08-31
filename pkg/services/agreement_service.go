@@ -30,6 +30,7 @@ type AgreementServiceInterface interface {
 	RespondAgreementChange(context.Context, domain.Notification) (*domain.Agreement, rest_errors.RestError)
 	GetAgreementEventResponses(context.Context, string) ([]domain.EventResponse, rest_errors.RestError)
 	InviteUsersToEvent(context.Context, string, []string) (string, rest_errors.RestError)
+	RespondEventInvite(context.Context, string, domain.EventResponse) (*domain.EventResponse, rest_errors.RestError)
 }
 
 type agreementService struct {
@@ -970,4 +971,55 @@ func isInSlice(input string, arr []string) bool {
 	}
 
 	return false
+}
+
+func (a agreementService) RespondEventInvite(ctx context.Context, agreementId string, eventResponse domain.EventResponse) (*domain.EventResponse, rest_errors.RestError) {
+	logger.Info("agreement service RespondEventInvite start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize
+	agreementId = strings.TrimSpace(html.EscapeString(agreementId))
+	eventResponse.Sanitize()
+
+	// Validate
+	if ok := eventResponse.Validate(); !ok {
+		logger.Error("agreement service RespondEventInvite - eventResponse failed validation", fmt.Errorf("invalidate eventResponse: %+v", eventResponse), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("invalid eventResponse")
+	}
+
+	// get current Agreement
+	agreement, getErr := a.GetAgreement(ctx, agreementId)
+	if getErr != nil {
+		logger.Error("agreement service RespondEventInvite - could not get agreement", getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, getErr
+	}
+
+	eventResponse.Id = uuid.NewString()
+	eventResponse.CreateDateTime = time.Now().UTC()
+
+	if isInSlice(eventResponse.UserId, agreement.InvitedParticipants) {
+		agreement.EventResponses = append(agreement.EventResponses, eventResponse.Id)
+	} else {
+		// the user was not invited, should not respond
+		logger.Error("greement service RespondEventInvite - user was not invited", fmt.Errorf("eventResponse: %+v - user not in agreement.InvitedParticipants: %+v", agreement, eventResponse), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("user was not invited, should not respond")
+	}
+
+	// check if user already responded
+	if isInSlice(eventResponse.UserId, agreement.AgreementAccept) || isInSlice(eventResponse.UserId, agreement.AgreementDecline) {
+		logger.Error("greement service RespondEventInvite - user already responded", fmt.Errorf("eventResponse: %+v - user already responded %+v", agreement, eventResponse), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("user already responded")
+	}
+
+	// update AgreementAccept or AgreementDecline slice
+	if eventResponse.Response == "accept" {
+		agreement.AgreementAccept = append(agreement.AgreementAccept, eventResponse.UserId)
+	} else if eventResponse.Response == "decline" {
+		agreement.AgreementDecline = append(agreement.AgreementDecline, eventResponse.UserId)
+	} else {
+		logger.Error("greement service RespondEventInvite - invalid response value for eventResponse", fmt.Errorf("eventResponse: %+v - invalid response value for eventResponse %+v", agreement, eventResponse), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("invalid response value")
+	}
+
+	logger.Info("agreement service RespondEventInvite finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AgreementRepository.RespondEventInvite(ctx, *agreement, eventResponse)
 }
