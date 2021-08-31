@@ -46,6 +46,12 @@ func StartApplication() {
 	router.Use(middleware.DefaultLogger)
 	router.Use(middleware.Recoverer)
 
+	// Enforce JSON Middleware
+	router.Use(enforceJSONHandler)
+
+	// Auth Middleware
+	router.Use(authMiddleware)
+
 	// Health Check
 	router.Get("/api/v1/health", controllers.HealthCheck)
 
