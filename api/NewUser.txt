@@ -7,5 +7,6 @@ Request
   "password": "pass123",
   "role": "user",
   "status": "active",
-  "public": "false"
+  "public": "false",
+  "phone": "216-621-1111"
 }

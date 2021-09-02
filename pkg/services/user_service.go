@@ -3,7 +3,8 @@ package services
 import (
 	"context"
 	"errors"
-	"fmt"
+	"html"
+	"strings"
 	"time"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
@@ -17,6 +18,7 @@ import (
 
 type UserServiceInterface interface {
 	NewUser(context.Context, domain.User) (*domain.User, rest_errors.RestError)
+	GetUser(context.Context, string) (*domain.User, rest_errors.RestError)
 }
 
 type userService struct {
@@ -60,11 +62,19 @@ func (u userService) NewUser(ctx context.Context, user domain.User) (*domain.Use
 	user.RequestedAgreements = []string{}
 	user.PendingAgreementRemovals = []string{}
 	user.PendingLeaveAgreements = []string{}
-	user.Notifications = []string{}
 	user.PendingFriendRequests = []string{}
-
-	fmt.Println(user.DOB)
+	user.Friends = []string{}
 
 	logger.Info("user service NewUser finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return u.UserRepository.NewUser(ctx, user)
+}
+
+func (u userService) GetUser(ctx context.Context, userId string) (*domain.User, rest_errors.RestError) {
+	logger.Info("user service GetUser start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize userId
+	userId = strings.TrimSpace(html.EscapeString(userId))
+
+	logger.Info("user service GetUser finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return u.UserRepository.GetUser(ctx, userId)
 }

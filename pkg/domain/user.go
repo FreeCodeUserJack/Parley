@@ -14,6 +14,7 @@ type User struct {
 	FirstName                string    `bson:"first_name" json:"first_name"`
 	LastName                 string    `bson:"last_name" json:"last_name"`
 	DOB                      time.Time `bson:"dob" json:"-"`
+	Phone                    string    `bson:"phone" json:"phone"`
 	Email                    string    `bson:"email" json:"email"`
 	Password                 string    `bson:"password" json:"password"`
 	Agreements               []string  `bson:"agreements" json:"agreements"`
@@ -21,7 +22,6 @@ type User struct {
 	RequestedAgreements      []string  `bson:"requested_agreements" json:"requested_agreements"`
 	PendingAgreementRemovals []string  `bson:"pending_agreement_removals" json:"pending_agreement_removals"`
 	PendingLeaveAgreements   []string  `bson:"pending_leave_agreements" json:"pending_leave_agreements"`
-	Notifications            []string  `bson:"notifications" json:"notifications"`
 	CreateDateTime           time.Time `bson:"create_datetime" json:"-"`
 	LastUpdateDateTime       time.Time `bson:"last_update_datetime" json:"-"`
 	Role                     string    `bson:"role" json:"role"`
@@ -86,6 +86,7 @@ func (u *User) Sanitize() {
 	u.Id = html.EscapeString(u.Id)
 	u.FirstName = strings.TrimSpace(html.EscapeString(u.FirstName))
 	u.LastName = strings.TrimSpace(html.EscapeString(u.LastName))
+	u.Phone = strings.TrimSpace(html.EscapeString(u.Phone))
 	u.Role = strings.TrimSpace(html.EscapeString(u.Role))
 	u.Status = strings.TrimSpace(html.EscapeString(u.Status))
 	u.Public = strings.TrimSpace(html.EscapeString(u.Public))
