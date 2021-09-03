@@ -24,6 +24,7 @@ type UserServiceInterface interface {
 	DeleteUser(context.Context, string) (*domain.User, rest_errors.RestError)
 	GetFriends(context.Context, string, []string) ([]domain.User, rest_errors.RestError)
 	RemoveFriend(context.Context, string, string) (*domain.User, rest_errors.RestError)
+	SearchUsers(context.Context, []string) ([]domain.User, rest_errors.RestError)
 }
 
 type userService struct {
@@ -182,4 +183,33 @@ func (u userService) RemoveFriend(ctx context.Context, userId string, friendId s
 
 	logger.Info("user service RemoveFriend finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return u.UserRepository.RemoveFriend(ctx, userId, friendId, notification)
+}
+
+func (u userService) SearchUsers(ctx context.Context, queries []string) ([]domain.User, rest_errors.RestError) {
+	logger.Info("user service SearchUsers start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize Data
+	queries = domain.SanitizeStringSlice(queries)
+
+	var input [][]string
+
+	for _, query := range queries {
+		buf := strings.Split(query, "=")
+		if len(buf) != 2 {
+			logger.Error("query is malformed", fmt.Errorf("contains malformed query: %v", queries), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewBadRequestError("query is malformed")
+		}
+		input = append(input, buf)
+	}
+
+	// Validate Queries
+	for _, q := range input {
+		if q[0] != "id" && q[0] != "first_name" && q[0] != "last_name" && q[0] != "email" && q[0] != "phone" {
+			logger.Error("query key is not accepted", fmt.Errorf("queries contain invalid key(s): %v", queries), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewBadRequestError("query contains invalid keys for search")
+		}
+	}
+
+	logger.Info("user service SearchUsers finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return u.UserRepository.SearchUsers(ctx, input)
 }

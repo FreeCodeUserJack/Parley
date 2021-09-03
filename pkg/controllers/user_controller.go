@@ -2,9 +2,11 @@ package controllers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
 	"github.com/FreeCodeUserJack/Parley/pkg/dto"
@@ -95,8 +97,24 @@ func (u usersResource) NewUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u usersResource) SearchUsers(w http.ResponseWriter, r *http.Request) {
+	logger.Info("user controller SearchUsers about to get query params", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	if !strings.Contains(r.URL.String(), "?") || !strings.Contains(r.URL.String(), "=") {
+		logger.Error("user controller SearchUsers - no query params: "+r.URL.String(), errors.New("missing query"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("missing query params"))
+		return
+	}
+
+	queries := strings.Split(strings.Split(r.URL.String(), "?")[1], "&")
+
+	res, serviceErr := u.UserService.SearchUsers(r.Context(), queries)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
 
 	logger.Info("user controller SearchUsers returning to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, res)
 }
 
 func (u usersResource) GetUser(w http.ResponseWriter, r *http.Request) {

@@ -25,6 +25,7 @@ type UserRepositoryInterface interface {
 	DeleteUser(context.Context, string) (*domain.User, rest_errors.RestError)
 	GetFriends(context.Context, string, []string) ([]domain.User, rest_errors.RestError)
 	RemoveFriend(context.Context, string, string, domain.Notification) (*domain.User, rest_errors.RestError)
+	SearchUsers(context.Context, [][]string) ([]domain.User, rest_errors.RestError)
 }
 
 type userRepository struct{}
@@ -296,4 +297,53 @@ func (u userRepository) RemoveFriend(ctx context.Context, userId, friendId strin
 
 	logger.Info("user repository RemoveFriend finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return &resUser, nil
+}
+
+func (u userRepository) SearchUsers(ctx context.Context, queries [][]string) ([]domain.User, rest_errors.RestError) {
+	logger.Info("user repository SearchUsers start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	collection := client.Database(db.DatabaseName).Collection(db.UsersCollectionName)
+
+	filter := bson.D{}
+
+	for _, query := range queries {
+		filter = append(filter, primitive.E{Key: query[0], Value: bson.D{
+			primitive.E{Key: "$regex", Value: primitive.Regex{
+				Pattern: ".*" + query[1] + ".*", Options: "i",
+			}},
+		}})
+	}
+
+	curr, dbErr := collection.Find(ctx, filter)
+
+	if dbErr != nil {
+		logger.Error("user repository SearchUsers - error trying to find users", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error trying to search users", errors.New("database error"))
+	}
+
+	var res []domain.User
+
+	for curr.Next(ctx) {
+		buf := domain.User{}
+		err := curr.Decode(&buf)
+		if err != nil {
+			logger.Error("user repository SearchUsers - bson decode error from mongo to user instance", err, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error trying to decode searched user into user instance", errors.New("database error"))
+		}
+		res = append(res, buf)
+	}
+
+	if len(res) == 0 {
+		logger.Error("user repository SearchUsers - no users found for search", fmt.Errorf("no users found for this queries: %v", queries), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewNotFoundError("no users found for search users")
+	}
+
+	logger.Info("user repository SearchUsers finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return res, nil
 }
