@@ -383,8 +383,21 @@ func (a agreementService) SearchAgreements(ctx context.Context, key string, val 
 	key = strings.TrimSpace(html.EscapeString(key))
 	val = strings.TrimSpace(html.EscapeString(val))
 
+	agreements, err := a.AgreementRepository.SearchAgreements(ctx, key, val)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter out the non-public agreements
+	var res []domain.Agreement
+	for _, el := range agreements {
+		if el.Public == "true" {
+			res = append(res, el)
+		}
+	}
+
 	logger.Info("agreement service SearchAgreements finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return a.AgreementRepository.SearchAgreements(ctx, key, val)
+	return res, err
 }
 
 func (a agreementService) AddUserToAgreement(ctx context.Context, agreementId string, friendId string) (string, rest_errors.RestError) {

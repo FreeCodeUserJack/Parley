@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
 	"github.com/FreeCodeUserJack/Parley/pkg/dto"
@@ -39,6 +40,11 @@ func (a authService) Login(ctx context.Context, loginReq dto.LoginRequest) (*dom
 	user, repoErr := a.AuthRepository.Login(ctx, loginReq)
 	if repoErr != nil {
 		return nil, repoErr
+	}
+
+	if user.Status == "deleted" || user.Status == "suspended" {
+		logger.Error("user status is not active", fmt.Errorf("user status not active: %+v", user), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("user_account is not active, status is: " + user.Status)
 	}
 
 	checkPasswordErr := security_utils.CheckPasswordHash(loginReq.Password, user.Password)

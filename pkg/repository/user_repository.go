@@ -20,6 +20,7 @@ type UserRepositoryInterface interface {
 	GetUser(context.Context, string) (*domain.User, rest_errors.RestError)
 	UpdateUser(context.Context, string, domain.User) (*domain.User, rest_errors.RestError)
 	DeleteUser(context.Context, string) (*domain.User, rest_errors.RestError)
+	GetFriends(context.Context, string, []string) ([]domain.User, rest_errors.RestError)
 }
 
 type userRepository struct{}
@@ -158,4 +159,47 @@ func (u userRepository) DeleteUser(ctx context.Context, userId string) (*domain.
 
 	logger.Info("user repository DeleteUser finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return &retUser, nil
+}
+
+func (u userRepository) GetFriends(ctx context.Context, userId string, uuids []string) ([]domain.User, rest_errors.RestError) {
+	logger.Info("user repository GetFriends Start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, err := db.GetMongoClient()
+	if err != nil {
+		logger.Error("error when trying to get db client", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	collection := client.Database(db.DatabaseName).Collection(db.UsersCollectionName)
+
+	filter := bson.D{primitive.E{Key: "_id", Value: bson.D{
+		primitive.E{Key: "$in", Value: uuids},
+	}}}
+
+	curr, findErr := collection.Find(ctx, filter)
+	if findErr != nil {
+		logger.Error("user repository GetFriends - find error for userId: "+userId, findErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error trying to get friends for userId: "+userId, errors.New("database error"))
+	}
+
+	var friends []domain.User
+	for curr.Next(ctx) {
+		buf := domain.User{}
+		err := curr.Decode(&buf)
+		if err != nil {
+			logger.Error("user repository GetFriends - could not decode db user to user instance", err, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error trying to decode db obj to user instance", errors.New("datbase error"))
+		}
+		friends = append(friends, buf)
+	}
+
+	curr.Close(ctx)
+
+	if len(friends) == 0 {
+		logger.Error("no friends found for list of userIds", errors.New("no documents found for search"), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewNotFoundError("no friends found for userId: " + userId)
+	}
+
+	logger.Info("user repository GetFriends finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return friends, nil
 }

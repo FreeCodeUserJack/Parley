@@ -21,6 +21,7 @@ type UserServiceInterface interface {
 	GetUser(context.Context, string) (*domain.User, rest_errors.RestError)
 	UpdateUser(context.Context, string, domain.User) (*domain.User, rest_errors.RestError)
 	DeleteUser(context.Context, string) (*domain.User, rest_errors.RestError)
+	GetFriends(context.Context, string, []string) ([]domain.User, rest_errors.RestError)
 }
 
 type userService struct {
@@ -129,4 +130,14 @@ func (u userService) DeleteUser(ctx context.Context, userId string) (*domain.Use
 
 	logger.Info("user service DeleteUser finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return u.UserRepository.DeleteUser(ctx, userId)
+}
+
+func (u userService) GetFriends(ctx context.Context, userId string, uuids []string) ([]domain.User, rest_errors.RestError) {
+	logger.Info("user service GetFriends start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize User Id
+	userId = strings.TrimSpace(html.EscapeString(userId))
+
+	logger.Info("user service GetFriends finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return u.UserRepository.GetFriends(ctx, userId, uuids)
 }
