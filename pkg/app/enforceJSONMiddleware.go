@@ -11,7 +11,7 @@ import (
 
 func enforceJSONHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
+		if r.Method != "GET" && r.Method != "DELETE" {
 			contentType := r.Header.Get("Content-Type")
 
 			if contentType != "" {

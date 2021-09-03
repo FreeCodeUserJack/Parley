@@ -20,6 +20,7 @@ type UserServiceInterface interface {
 	NewUser(context.Context, domain.User) (*domain.User, rest_errors.RestError)
 	GetUser(context.Context, string) (*domain.User, rest_errors.RestError)
 	UpdateUser(context.Context, string, domain.User) (*domain.User, rest_errors.RestError)
+	DeleteUser(context.Context, string) (*domain.User, rest_errors.RestError)
 }
 
 type userService struct {
@@ -80,7 +81,7 @@ func (u userService) GetUser(ctx context.Context, userId string) (*domain.User, 
 	return u.UserRepository.GetUser(ctx, userId)
 }
 
-func (u userService)	UpdateUser(ctx context.Context, userId string, user domain.User) (*domain.User, rest_errors.RestError) {
+func (u userService) UpdateUser(ctx context.Context, userId string, user domain.User) (*domain.User, rest_errors.RestError) {
 	logger.Info("user service UpdateUser start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize Data
@@ -118,4 +119,14 @@ func (u userService)	UpdateUser(ctx context.Context, userId string, user domain.
 
 	logger.Info("user service UpdateUser finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return u.UserRepository.UpdateUser(ctx, userId, *savedUser)
+}
+
+func (u userService) DeleteUser(ctx context.Context, userId string) (*domain.User, rest_errors.RestError) {
+	logger.Info("user service DeleteUser start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize User Id
+	userId = strings.TrimSpace(html.EscapeString(userId))
+
+	logger.Info("user service DeleteUser finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return u.UserRepository.DeleteUser(ctx, userId)
 }
