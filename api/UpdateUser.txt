@@ -1,0 +1,29 @@
+Request
+{
+    "first_name": "Kled",
+    "last_name": "Sharp",
+    "status": "inactive"
+}
+
+Response
+{
+    "_id": "f43202ec-7f5f-450e-bf37-8c7ea0aad21b",
+    "first_name": "Kled",
+    "last_name": "Sharp",
+    "phone": "216-621-1111",
+    "email": "jacklagall@gmail.com",
+    "password": "",
+    "agreements": [],
+    "invited_agreements": [],
+    "requested_agreements": [],
+    "pending_agreement_removals": [],
+    "pending_leave_agreements": [],
+    "role": "user",
+    "status": "inactive",
+    "friends": [],
+    "public": "false",
+    "pending_friend_requests": [],
+    "dob": 1234567890,
+    "create_datetime": 1630635804,
+    "last_update_datetime": 1630635804
+}

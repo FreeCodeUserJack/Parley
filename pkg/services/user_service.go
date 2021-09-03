@@ -19,6 +19,7 @@ import (
 type UserServiceInterface interface {
 	NewUser(context.Context, domain.User) (*domain.User, rest_errors.RestError)
 	GetUser(context.Context, string) (*domain.User, rest_errors.RestError)
+	UpdateUser(context.Context, string, domain.User) (*domain.User, rest_errors.RestError)
 }
 
 type userService struct {
@@ -77,4 +78,44 @@ func (u userService) GetUser(ctx context.Context, userId string) (*domain.User, 
 
 	logger.Info("user service GetUser finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return u.UserRepository.GetUser(ctx, userId)
+}
+
+func (u userService)	UpdateUser(ctx context.Context, userId string, user domain.User) (*domain.User, rest_errors.RestError) {
+	logger.Info("user service UpdateUser start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize Data
+	userId = strings.TrimSpace(html.EscapeString(userId))
+	user.Sanitize()
+
+	// Get Saved User
+	savedUser, getErr := u.UserRepository.GetUser(ctx, userId)
+	if getErr != nil {
+		logger.Error("user service UpdateUser - could not get saved user", getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, getErr
+	}
+
+	if user.FirstName != "" {
+		savedUser.FirstName = user.FirstName
+	}
+	if user.LastName != "" {
+		savedUser.LastName = user.LastName
+	}
+	if !user.DOB.IsZero() {
+		savedUser.DOB = user.DOB
+	}
+	// if user.Role != "" {
+	// 	savedUser.Role = user.Role
+	// }
+	if user.Status != "" {
+		savedUser.Status = user.Status
+	}
+	if user.Public != "" {
+		savedUser.Public = user.Public
+	}
+	if user.Phone != "" {
+		savedUser.Phone = user.Phone
+	}
+
+	logger.Info("user service UpdateUser finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return u.UserRepository.UpdateUser(ctx, userId, *savedUser)
 }

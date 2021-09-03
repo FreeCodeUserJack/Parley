@@ -118,8 +118,36 @@ func (u usersResource) GetUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u usersResource) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	logger.Info("user controller UpdateUser about to get path param userId", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	userId := chi.URLParam(r, "userId")
+	if userId == "" {
+		reqErr := rest_errors.NewBadRequestError("userId is missing")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	logger.Info("user controller UpdateUser about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	var user domain.User
+	jsonErr := json.NewDecoder(r.Body).Decode(&user)
+	if jsonErr != nil {
+		restErr := rest_errors.NewBadRequestError("invalid json body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+	defer r.Body.Close()
+
+	res, serviceErr := u.UserService.UpdateUser(r.Context(), userId, user)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
 
 	logger.Info("user controller UpdateUser returning to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, res)
 }
 
 func (u usersResource) DeleteUser(w http.ResponseWriter, r *http.Request) {
