@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ type UserServiceInterface interface {
 	UpdateUser(context.Context, string, domain.User) (*domain.User, rest_errors.RestError)
 	DeleteUser(context.Context, string) (*domain.User, rest_errors.RestError)
 	GetFriends(context.Context, string, []string) ([]domain.User, rest_errors.RestError)
+	RemoveFriend(context.Context, string, string) (*domain.User, rest_errors.RestError)
 }
 
 type userService struct {
@@ -67,6 +69,7 @@ func (u userService) NewUser(ctx context.Context, user domain.User) (*domain.Use
 	user.PendingLeaveAgreements = []string{}
 	user.PendingFriendRequests = []string{}
 	user.Friends = []string{}
+	user.SentFriendRequests = []string{}
 
 	logger.Info("user service NewUser finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return u.UserRepository.NewUser(ctx, user)
@@ -140,4 +143,43 @@ func (u userService) GetFriends(ctx context.Context, userId string, uuids []stri
 
 	logger.Info("user service GetFriends finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return u.UserRepository.GetFriends(ctx, userId, uuids)
+}
+
+func (u userService) RemoveFriend(ctx context.Context, userId string, friendId string) (*domain.User, rest_errors.RestError) {
+	logger.Info("user service RemoveFriend start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize ids
+	userId = strings.TrimSpace(html.EscapeString(userId))
+	friendId = strings.TrimSpace(html.EscapeString(friendId))
+
+	// Get Saved User
+	user, getErr := u.UserRepository.GetUser(ctx, userId)
+	if getErr != nil {
+		logger.Error("user service RemoveFriend - could not get saved user", getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, getErr
+	}
+
+	// Validate
+	if !isInSlice(friendId, user.Friends) {
+		logger.Error("friendId is not a friend of userId", fmt.Errorf("friendId: %s, user instance: %+v", friendId, user), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError(fmt.Sprintf("friendId: %s, is not a friend of userId: %s", friendId, userId))
+	}
+
+	notification := domain.Notification{
+		Id:               uuid.NewString(),
+		Title:            fmt.Sprintf("%s %s removed you from their friend list", user.FirstName, user.LastName),
+		Message:          "",
+		CreateDateTime:   time.Now().UTC(),
+		Status:           "new",
+		UserId:           friendId,
+		ContactId:        userId,
+		ContactFirstName: user.FirstName,
+		Type:             "notifyUpdate",
+		Action:           "update",
+	}
+
+	// Remove friendId from User and userId from Friend - then send notification to Friend
+
+	logger.Info("user service RemoveFriend finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return u.UserRepository.RemoveFriend(ctx, userId, friendId, notification)
 }
