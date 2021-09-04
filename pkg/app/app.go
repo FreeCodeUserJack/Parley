@@ -50,12 +50,12 @@ func StartApplication() {
 	router.Use(enforceJSONHandler)
 
 	// Auth Middleware
-	// router.Use(authMiddleware)
+	router.Use(authMiddleware)
 
 	// Health Check
 	router.Get("/api/v1/health", controllers.HealthCheck)
 
-	router.NotFound(controllers.NotFoundHandler)
+	//router.NotFound(controllers.NotFoundHandler)
 
 	// Auth
 	router.Mount("/api/v1/auth", controllers.NewAuthController(services.NewAuthService(repository.NewAuthRepository(), repository.NewTokenRepository())).Routes())
