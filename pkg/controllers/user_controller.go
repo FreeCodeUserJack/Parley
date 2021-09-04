@@ -193,8 +193,45 @@ func (u usersResource) DeleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u usersResource) AddFriend(w http.ResponseWriter, r *http.Request) {
+	logger.Info("user controller AddFriend about to get userId", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	userId := chi.URLParam(r, "userId")
+	if userId == "" {
+		reqErr := rest_errors.NewBadRequestError("userId is missing")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	logger.Info("user controller AddFriend about to get friendId", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	friendId := chi.URLParam(r, "friendId")
+	if friendId == "" {
+		reqErr := rest_errors.NewBadRequestError("friendId is missing")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	logger.Info("user controller AddFriend about to get body", context_utils.GetTraceAndClientIds(r.Context())...)
+	var message dto.Message
+	jsonErr := json.NewDecoder(r.Body).Decode(&message)
+	if jsonErr != nil {
+		restErr := rest_errors.NewBadRequestError("invalid json body")
+		logger.Error(restErr.Message(), restErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, restErr)
+		return
+	}
+	defer r.Body.Close()
+
+	res, serviceErr := u.UserService.AddFriend(r.Context(), userId, friendId, message.Text)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
 
 	logger.Info("user controller AddFriend returning to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, res)
 }
 
 func (u usersResource) RemoveFriend(w http.ResponseWriter, r *http.Request) {

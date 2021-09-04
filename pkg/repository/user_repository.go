@@ -27,6 +27,7 @@ type UserRepositoryInterface interface {
 	RemoveFriend(context.Context, string, string, domain.Notification) (*domain.User, rest_errors.RestError)
 	SearchUsers(context.Context, [][]string) ([]domain.User, rest_errors.RestError)
 	GetAgreements(context.Context, string) ([]domain.Agreement, rest_errors.RestError)
+	AddFriend(context.Context, string, string, domain.Notification) (*domain.User, rest_errors.RestError)
 }
 
 type userRepository struct{}
@@ -240,14 +241,14 @@ func (u userRepository) RemoveFriend(ctx context.Context, userId, friendId strin
 				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No user found for id: %s", userId))
 			}
 			logger.Error(fmt.Sprintf("user repository RemoveFriend could not FindOneAndUpdate id: %s", userId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
-			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to delete deadline and get doc back id: %s", userId), errors.New("database error"))
+			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to update user and get doc back id: %s", userId), errors.New("database error"))
 		}
 
 		var retUser domain.User
 		decodeErr := res.Decode(&retUser)
 		if decodeErr != nil {
-			logger.Error("user repository RemoveFriend could not decode update doc to Agreement type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
-			return nil, rest_errors.NewInternalServerError("error when trying to retrieve updated document", errors.New("database error"))
+			logger.Error("user repository RemoveFriend could not decode update doc to User type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error when trying to decode db obj into user instance", errors.New("database error"))
 		}
 
 		// Update Friend
@@ -260,18 +261,18 @@ func (u userRepository) RemoveFriend(ctx context.Context, userId, friendId strin
 		_, dbErr := userColl.UpdateOne(ctx, filter2, updater2)
 		if dbErr != nil {
 			if dbErr.Error() == "mongo: no documents in result" {
-				logger.Error(fmt.Sprintf("No user found for id: %s: ", friendId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
-				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No user found for id: %s", friendId))
+				logger.Error(fmt.Sprintf("No friend found for id: %s: ", friendId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No friend found for id: %s", friendId))
 			}
-			logger.Error(fmt.Sprintf("user repository RemoveFriend could not FindOneAndUpdate id: %s", friendId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
-			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to delete deadline and get doc back id: %s", friendId), errors.New("database error"))
+			logger.Error(fmt.Sprintf("user repository RemoveFriend could not Update friend id: %s", friendId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to update friend id: %s", friendId), errors.New("database error"))
 		}
 
 		// Insert Notification
 		_, insertErr := notificationColl.InsertOne(sessCtx, notification)
 		if insertErr != nil {
-			logger.Error("user repository RemoveFriend transaction to insert notifications failed", insertErr, context_utils.GetTraceAndClientIds(sessCtx)...)
-			return nil, rest_errors.NewInternalServerError("could not insert notifications", errors.New("database error"))
+			logger.Error("user repository RemoveFriend transaction to insert notification failed", insertErr, context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewInternalServerError("could not insert notification", errors.New("database error"))
 		}
 
 		return retUser, nil
@@ -387,4 +388,94 @@ func (u userRepository) GetAgreements(ctx context.Context, userId string) ([]dom
 
 	logger.Info("user repository GetAgreements finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return res, nil
+}
+
+func (u userRepository) AddFriend(ctx context.Context, userId, friendId string, notification domain.Notification) (*domain.User, rest_errors.RestError) {
+	logger.Info("user repository AddFriend start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
+	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
+	notificationColl := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName, wcMajorityCollectionOpts)
+	userColl := client.Database(db.DatabaseName).Collection(db.UsersCollectionName, wcMajorityCollectionOpts)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// Update User
+		filter := bson.D{primitive.E{Key: "_id", Value: userId}}
+
+		updater := bson.D{primitive.E{Key: "$push", Value: bson.D{
+			primitive.E{Key: "sent_friend_requests", Value: friendId},
+		}}}
+
+		res := userColl.FindOneAndUpdate(ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+		if res.Err() != nil {
+			if res.Err().Error() == "mongo: no documents in result" {
+				logger.Error(fmt.Sprintf("No user found for id: %s: ", userId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No user found for id: %s", userId))
+			}
+			logger.Error(fmt.Sprintf("user repository AddFriend could not FindOneAndUpdate id: %s", userId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to update user and get doc back id: %s", userId), errors.New("database error"))
+		}
+
+		var retUser domain.User
+		decodeErr := res.Decode(&retUser)
+		if decodeErr != nil {
+			logger.Error("user repository AddFriend could not decode update doc to User type instance", decodeErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error when trying to decode db obj to user instance", errors.New("database error"))
+		}
+
+		// Update Friend
+		filter2 := bson.D{primitive.E{Key: "_id", Value: friendId}}
+
+		updater2 := bson.D{primitive.E{Key: "$push", Value: bson.D{
+			primitive.E{Key: "pending_friend_requests", Value: userId},
+		}}}
+
+		_, dbErr := userColl.UpdateOne(ctx, filter2, updater2)
+		if dbErr != nil {
+			if dbErr.Error() == "mongo: no documents in result" {
+				logger.Error(fmt.Sprintf("No friend found for id: %s: ", friendId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No friend found for id: %s", friendId))
+			}
+			logger.Error(fmt.Sprintf("user repository AddFriend could not Update friend id: %s", friendId), res.Err(), context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to update friend: %s", friendId), errors.New("database error"))
+		}
+
+		// Insert Notification
+		_, insertErr := notificationColl.InsertOne(sessCtx, notification)
+		if insertErr != nil {
+			logger.Error("user repository AddFriend transaction to insert notification failed", insertErr, context_utils.GetTraceAndClientIds(sessCtx)...)
+			return nil, rest_errors.NewInternalServerError("could not insert notification", errors.New("database error"))
+		}
+
+		return retUser, nil
+	}
+
+	session, err := client.StartSession()
+	if err != nil {
+		logger.Error("user repository AddFriend - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
+	}
+	defer session.EndSession(ctx)
+
+	res, transactionErr := session.WithTransaction(ctx, callback)
+	if transactionErr != nil {
+		logger.Error("user repository AddFriend - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+	}
+
+	resUser, ok := res.(domain.User)
+	if !ok {
+		logger.Error("user repository AddFriend - assertion failed", fmt.Errorf("could not assert into domain.Agreement: %v", res), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("db type assertion failed", errors.New("assertion error"))
+	}
+
+	logger.Info("user repository AddFriend finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return &resUser, nil
 }

@@ -1,0 +1,32 @@
+Request
+{
+    "text": "Accept my friend request!"
+}
+
+Response
+{
+    "_id": "f43202ec-7f5f-450e-bf37-8c7ea0aad21b",
+    "first_name": "Kled",
+    "last_name": "Sharp",
+    "phone": "216-621-1111",
+    "email": "jacklagall@gmail.com",
+    "password": "",
+    "agreements": [],
+    "invited_agreements": [],
+    "requested_agreements": [],
+    "pending_agreement_removals": [],
+    "pending_leave_agreements": [],
+    "role": "user",
+    "status": "active",
+    "friends": [
+        "56389f31-454e-4817-862d-0de276610486"
+    ],
+    "public": "false",
+    "pending_friend_requests": [],
+    "sent_friend_requests": [
+        "77ffa5de-1dbe-44db-9cba-a91c93f76dd0"
+    ],
+    "dob": 1234567890,
+    "create_datetime": 1630635804,
+    "last_update_datetime": 1630635804
+}

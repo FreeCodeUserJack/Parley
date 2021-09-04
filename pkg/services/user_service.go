@@ -26,6 +26,7 @@ type UserServiceInterface interface {
 	RemoveFriend(context.Context, string, string) (*domain.User, rest_errors.RestError)
 	SearchUsers(context.Context, []string) ([]domain.User, rest_errors.RestError)
 	GetAgreements(context.Context, string) ([]domain.Agreement, rest_errors.RestError)
+	AddFriend(context.Context, string, string, string) (*domain.User, rest_errors.RestError)
 }
 
 type userService struct {
@@ -223,4 +224,46 @@ func (u userService) GetAgreements(ctx context.Context, userId string) ([]domain
 
 	logger.Info("user service GetAgreements finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return u.UserRepository.GetAgreements(ctx, userId)
+}
+
+func (u userService) AddFriend(ctx context.Context, userId, friendId, message string) (*domain.User, rest_errors.RestError) {
+	logger.Info("user service AddFriend start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize ids
+	userId = strings.TrimSpace(html.EscapeString(userId))
+	friendId = strings.TrimSpace(html.EscapeString(friendId))
+	message = strings.TrimSpace(html.EscapeString(message))
+
+	// Get Saved User
+	user, getErr := u.UserRepository.GetUser(ctx, userId)
+	if getErr != nil {
+		logger.Error("user service AddFriend - could not get saved user", getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, getErr
+	}
+
+	// Validate
+	if isInSlice(friendId, user.Friends) {
+		logger.Error("user is already a friend", fmt.Errorf("friendId: %s already in user.Friends: %+v", friendId, user), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("friend is already on friend list")
+	}
+	if isInSlice(friendId, user.SentFriendRequests) {
+		logger.Error("friend request already sent", fmt.Errorf("friendId: %s already in user.SentFriendRequests: %+v", friendId, user), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("already sent friend request")
+	}
+
+	notification := domain.Notification{
+		Id:               uuid.NewString(),
+		Title:            fmt.Sprintf("Friend request from %s %s!", user.FirstName, user.LastName),
+		Message:          message,
+		CreateDateTime:   time.Now().UTC(),
+		Status:           "new",
+		UserId:           friendId,
+		ContactId:        userId,
+		ContactFirstName: user.FirstName,
+		Type:             "notifyInvite",
+		Action:           "requires_response",
+	}
+
+	logger.Info("user service AddFriend finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return u.UserRepository.AddFriend(ctx, userId, friendId, notification)
 }
