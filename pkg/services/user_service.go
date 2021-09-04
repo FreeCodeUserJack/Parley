@@ -27,6 +27,7 @@ type UserServiceInterface interface {
 	SearchUsers(context.Context, []string) ([]domain.User, rest_errors.RestError)
 	GetAgreements(context.Context, string) ([]domain.Agreement, rest_errors.RestError)
 	AddFriend(context.Context, string, string, string) (*domain.User, rest_errors.RestError)
+	RespondFriendRequest(context.Context, string, string, string) (*domain.User, rest_errors.RestError)
 }
 
 type userService struct {
@@ -229,7 +230,7 @@ func (u userService) GetAgreements(ctx context.Context, userId string) ([]domain
 func (u userService) AddFriend(ctx context.Context, userId, friendId, message string) (*domain.User, rest_errors.RestError) {
 	logger.Info("user service AddFriend start", context_utils.GetTraceAndClientIds(ctx)...)
 
-	// Sanitize ids
+	// Sanitize inputs
 	userId = strings.TrimSpace(html.EscapeString(userId))
 	friendId = strings.TrimSpace(html.EscapeString(friendId))
 	message = strings.TrimSpace(html.EscapeString(message))
@@ -266,4 +267,54 @@ func (u userService) AddFriend(ctx context.Context, userId, friendId, message st
 
 	logger.Info("user service AddFriend finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return u.UserRepository.AddFriend(ctx, userId, friendId, notification)
+}
+
+func (u userService) RespondFriendRequest(ctx context.Context, userId, friendId, message string) (*domain.User, rest_errors.RestError) {
+	logger.Info("user service RespondFriendRequest start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize inputs
+	userId = strings.TrimSpace(html.EscapeString(userId))
+	friendId = strings.TrimSpace(html.EscapeString(friendId))
+	message = strings.TrimSpace(html.EscapeString(message))
+
+	if message != "accepted" && message != "declined" {
+		logger.Error("invalid message value", fmt.Errorf("message value invalid: %s", message), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("message value is invalid")
+	}
+
+	// Get Saved User
+	user, getErr := u.UserRepository.GetUser(ctx, userId)
+	if getErr != nil {
+		logger.Error("user service AddFriend - could not get saved user", getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, getErr
+	}
+
+	// Validate
+	if !isInSlice(friendId, user.PendingFriendRequests) {
+		logger.Error("user service AddFriend - friend never sent a request to this user", fmt.Errorf("friendId: %s not in user.PendingFriendRequest: %+v", friendId, user), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("your friend never sent you an invite!")
+	}
+
+	var typeStr string
+	if message == "accepted" {
+		typeStr = "notifyAcceptFriendInvite"
+	} else { // "declined"
+		typeStr = "notifyDeclineFriendInvite"
+	}
+
+	notification := domain.Notification{
+		Id:               uuid.NewString(),
+		Title:            fmt.Sprintf("%s %s %s your friend request", user.FirstName, user.LastName, message),
+		Message:          "",
+		CreateDateTime:   time.Now().UTC(),
+		Status:           "new",
+		UserId:           friendId,
+		ContactId:        userId,
+		ContactFirstName: user.FirstName,
+		Type:             typeStr,
+		Action:           "notify",
+	}
+
+	logger.Info("user service RespondFriendRequest finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return u.UserRepository.RespondFriendRequest(ctx, userId, friendId, notification)
 }
