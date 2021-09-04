@@ -25,6 +25,7 @@ type UserServiceInterface interface {
 	GetFriends(context.Context, string, []string) ([]domain.User, rest_errors.RestError)
 	RemoveFriend(context.Context, string, string) (*domain.User, rest_errors.RestError)
 	SearchUsers(context.Context, []string) ([]domain.User, rest_errors.RestError)
+	GetAgreements(context.Context, string) ([]domain.Agreement, rest_errors.RestError)
 }
 
 type userService struct {
@@ -212,4 +213,14 @@ func (u userService) SearchUsers(ctx context.Context, queries []string) ([]domai
 
 	logger.Info("user service SearchUsers finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return u.UserRepository.SearchUsers(ctx, input)
+}
+
+func (u userService) GetAgreements(ctx context.Context, userId string) ([]domain.Agreement, rest_errors.RestError) {
+	logger.Info("user service GetAgreements start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize ids
+	userId = strings.TrimSpace(html.EscapeString(userId))
+
+	logger.Info("user service GetAgreements finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return u.UserRepository.GetAgreements(ctx, userId)
 }

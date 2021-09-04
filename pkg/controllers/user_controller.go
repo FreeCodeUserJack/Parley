@@ -262,8 +262,24 @@ func (u usersResource) GetFriends(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u usersResource) GetAgreements(w http.ResponseWriter, r *http.Request) {
+	logger.Info("user controller GetAgreements about to get path param userId", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	userId := chi.URLParam(r, "userId")
+	if userId == "" {
+		reqErr := rest_errors.NewBadRequestError("userId is missing")
+		logger.Error(reqErr.Message(), reqErr, context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, reqErr)
+		return
+	}
+
+	res, serviceErr := u.UserService.GetAgreements(r.Context(), userId)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
 
 	logger.Info("user controller GetAgreements returning to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, res)
 }
 
 func (u usersResource) RespondFriendRequest(w http.ResponseWriter, r *http.Request) {

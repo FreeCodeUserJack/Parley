@@ -26,6 +26,7 @@ type UserRepositoryInterface interface {
 	GetFriends(context.Context, string, []string) ([]domain.User, rest_errors.RestError)
 	RemoveFriend(context.Context, string, string, domain.Notification) (*domain.User, rest_errors.RestError)
 	SearchUsers(context.Context, [][]string) ([]domain.User, rest_errors.RestError)
+	GetAgreements(context.Context, string) ([]domain.Agreement, rest_errors.RestError)
 }
 
 type userRepository struct{}
@@ -345,5 +346,45 @@ func (u userRepository) SearchUsers(ctx context.Context, queries [][]string) ([]
 	}
 
 	logger.Info("user repository SearchUsers finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return res, nil
+}
+
+func (u userRepository) GetAgreements(ctx context.Context, userId string) ([]domain.Agreement, rest_errors.RestError) {
+	logger.Info("user repository GetAgreements start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	client, mongoErr := db.GetMongoClient()
+	if mongoErr != nil {
+		logger.Error("error when trying to get db client", mongoErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
+	}
+
+	collection := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName)
+
+	filter := bson.D{primitive.E{Key: "created_by", Value: userId}}
+
+	curr, dbErr := collection.Find(ctx, filter)
+	if dbErr != nil {
+		logger.Error("user repository GetAgreements - error trying to find agreements", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error trying to search agreements", errors.New("database error"))
+	}
+
+	var res []domain.Agreement
+
+	for curr.Next(ctx) {
+		buf := domain.Agreement{}
+		err := curr.Decode(&buf)
+		if err != nil {
+			logger.Error("user repository GetAgreements - bson decode error from mongo to agreement instance", err, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error trying to decode searched agreement into agreement instance", errors.New("database error"))
+		}
+		res = append(res, buf)
+	}
+
+	if len(res) == 0 {
+		logger.Error("user repository GetAgreements - no agreements found for search", fmt.Errorf("no agreements found for userId: %s", userId), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewNotFoundError("no agreements found for search users")
+	}
+
+	logger.Info("user repository GetAgreements finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return res, nil
 }
