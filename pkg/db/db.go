@@ -81,7 +81,7 @@ func GetMongoClient() (*mongo.Client, error) {
 
 		// SetHosts for multi nodes in cluster
 		clientOptions := options.Client().ApplyURI(mongoDBConnectionString)
-		//clientOptions.SetReplicaSet(ReplicaSetName)
+		clientOptions.SetReplicaSet(ReplicaSetName)
 
 		client, err := mongo.Connect(context.TODO(), clientOptions)
 		if err != nil {

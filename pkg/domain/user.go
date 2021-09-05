@@ -30,6 +30,8 @@ type User struct {
 	Public                   string    `bson:"public" json:"public"`
 	PendingFriendRequests    []string  `bson:"pending_friend_requests" json:"pending_friend_requests"`
 	SentFriendRequests       []string  `bson:"sent_friend_requests" json:"sent_friend_requests"`
+	EmailVerified            string    `bson:"email_verified" json:"email_verified"`
+	EmailVerification        string    `bson:"email_verification" json:"email_verification"`
 }
 
 func (u User) MarshalJSON() ([]byte, error) {
@@ -99,4 +101,6 @@ func (u *User) Sanitize() {
 	u.PendingAgreementRemovals = SanitizeStringSlice(u.PendingAgreementRemovals)
 	u.PendingLeaveAgreements = SanitizeStringSlice(u.PendingLeaveAgreements)
 	u.SentFriendRequests = SanitizeStringSlice(u.SentFriendRequests)
+	u.EmailVerified = strings.TrimSpace(html.EscapeString(u.EmailVerified))
+	u.EmailVerification = strings.TrimSpace(html.EscapeString(u.EmailVerification))
 }

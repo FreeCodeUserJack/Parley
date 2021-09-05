@@ -2,10 +2,11 @@ package app
 
 import (
 	"fmt"
-	"github.com/golang-jwt/jwt"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/golang-jwt/jwt"
 
 	"github.com/go-chi/chi"
 )
@@ -13,7 +14,7 @@ import (
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		if r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/health" || !router.Match(chi.NewRouteContext(), r.Method, r.URL.Path) {
+		if r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/health" || r.URL.Path == "/api/v1/users/new" || r.URL.Path == "/api/v1/auth/verifyEmail" || !router.Match(chi.NewRouteContext(), r.Method, r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}

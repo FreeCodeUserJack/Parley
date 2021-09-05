@@ -11,6 +11,7 @@ import (
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
 	"github.com/FreeCodeUserJack/Parley/pkg/repository"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/context_utils"
+	"github.com/FreeCodeUserJack/Parley/pkg/utils/email_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/rest_errors"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/security_utils"
 	"github.com/FreeCodeUserJack/Parley/tools/logger"
@@ -75,8 +76,21 @@ func (u userService) NewUser(ctx context.Context, user domain.User) (*domain.Use
 	user.Friends = []string{}
 	user.SentFriendRequests = []string{}
 
+	logger.Info("user service NewUser calling UserRepository NewUser", context_utils.GetTraceAndClientIds(ctx)...)
+
+	retUser, repoErr := u.UserRepository.NewUser(ctx, user)
+	if repoErr != nil {
+		return nil, repoErr
+	}
+
+	// Check if need to verify email
+	if user.Email != "" {
+		user.EmailVerified = "false"
+		email_utils.SendEmail()
+	}
+
 	logger.Info("user service NewUser finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return u.UserRepository.NewUser(ctx, user)
+	return retUser, nil
 }
 
 func (u userService) GetUser(ctx context.Context, userId string) (*domain.User, rest_errors.RestError) {
