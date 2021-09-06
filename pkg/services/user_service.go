@@ -78,19 +78,18 @@ func (u userService) NewUser(ctx context.Context, user domain.User) (*domain.Use
 
 	logger.Info("user service NewUser calling UserRepository NewUser", context_utils.GetTraceAndClientIds(ctx)...)
 
-	retUser, repoErr := u.UserRepository.NewUser(ctx, user)
-	if repoErr != nil {
-		return nil, repoErr
-	}
-
 	// Check if need to verify email
 	if user.Email != "" {
 		user.EmailVerified = "false"
-		email_utils.SendEmail()
+		emailVerification, err := email_utils.SendEmail(ctx, user.Email, user)
+		if err != nil {
+			return nil, err
+		}
+		return u.UserRepository.NewUserVerifyEmail(ctx, user, *emailVerification)
 	}
 
 	logger.Info("user service NewUser finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return retUser, nil
+	return u.UserRepository.NewUser(ctx, user)
 }
 
 func (u userService) GetUser(ctx context.Context, userId string) (*domain.User, rest_errors.RestError) {
