@@ -52,29 +52,31 @@ func SendEmail(ctx context.Context, recipientEmail string, user domain.User) (*d
 	b, err := ioutil.ReadFile("../../oauth/gmail/credentials.json")
 	if err != nil {
 		logger.Error("Unable to read client secret file:", err)
+		return nil, rest_errors.NewInternalServerError("error trying to get email config", errors.New("smtp error"))
 	}
 
 	config, err := google.ConfigFromJSON(b, gmail.GmailSendScope)
 	if err != nil {
 		logger.Error("Unable to parse client secret file config:", err)
+		return nil, rest_errors.NewInternalServerError("error trying to create email config", errors.New("smtp error"))
 	}
 	client := getClient(config)
 
 	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		logger.Error("Unable to retrieve Gmail client:", err)
+		return nil, rest_errors.NewInternalServerError("error trying to retrieve email client", errors.New("smtp error"))
 	}
 
 	// Create Message
 	message := fmt.Sprintf("Please click following link to verify email:\n\n%s/api/v1/auth/verifyEmail?userId=%s&authId=%s", server, user.Id, emailVerification.Id)
 
 	// Send message
-	ret, sendErr := sendMail(email, recipientEmail, "Please Verify Your Email", message, srv)
+	_, sendErr := sendMail(email, recipientEmail, "Please Verify Your Email", message, srv)
 	if sendErr != nil {
 		logger.Error("could not send email", sendErr)
 		return nil, rest_errors.NewInternalServerError("could not send email", errors.New("smtp error"))
 	}
-	fmt.Println("Email sent:", ret)
 
 	logger.Info(fmt.Sprintf("email sent to %s for user id %s", recipientEmail, user.Id), context_utils.GetTraceAndClientIds(ctx)...)
 	return &emailVerification, nil
