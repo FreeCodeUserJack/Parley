@@ -73,24 +73,24 @@ func (u userRepository) NewUserVerifyEmail(ctx context.Context, user domain.User
 	emailVerificationColl := client.Database(db.DatabaseName).Collection(db.EmailVerificationCollectionName, wcMajorityCollectionOpts)
 	userColl := client.Database(db.DatabaseName).Collection(db.UsersCollectionName, wcMajorityCollectionOpts)
 
-	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
-		// Insert User
-		_, dbErr := userColl.InsertOne(ctx, user)
+	// callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+	// 	// Insert User
+	// 	_, dbErr := userColl.InsertOne(ctx, user)
 
-		if dbErr != nil {
-			logger.Error(fmt.Sprintf("user repository NewUserVerifyEmail could not insert user: %+v", user), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
-			return nil, rest_errors.NewInternalServerError("error trying to insert user", errors.New("database error"))
-		}
+	// 	if dbErr != nil {
+	// 		logger.Error(fmt.Sprintf("user repository NewUserVerifyEmail could not insert user: %+v", user), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+	// 		return nil, rest_errors.NewInternalServerError("error trying to insert user", errors.New("database error"))
+	// 	}
 
-		// Insert Email Verification
-		_, insertErr := emailVerificationColl.InsertOne(sessCtx, emailVerification)
-		if insertErr != nil {
-			logger.Error("user repository NewUserVerifyEmail transaction to insert email verification failed", insertErr, context_utils.GetTraceAndClientIds(sessCtx)...)
-			return nil, rest_errors.NewInternalServerError("could not insert email verification", errors.New("database error"))
-		}
+	// 	// Insert Email Verification
+	// 	_, insertErr := emailVerificationColl.InsertOne(sessCtx, emailVerification)
+	// 	if insertErr != nil {
+	// 		logger.Error("user repository NewUserVerifyEmail transaction to insert email verification failed", insertErr, context_utils.GetTraceAndClientIds(sessCtx)...)
+	// 		return nil, rest_errors.NewInternalServerError("could not insert email verification", errors.New("database error"))
+	// 	}
 
-		return nil, nil
-	}
+	// 	return nil, nil
+	// }
 
 	session, err := client.StartSession()
 	if err != nil {
@@ -99,12 +99,32 @@ func (u userRepository) NewUserVerifyEmail(ctx context.Context, user domain.User
 	}
 	defer session.EndSession(ctx)
 
-	_, transactionErr := session.WithTransaction(ctx, callback)
-	if transactionErr != nil {
+	// _, transactionErr := session.WithTransaction(ctx, callback)
+	// if transactionErr != nil {
+	// 	session.AbortTransaction(ctx)
+	// 	logger.Error("user repository NewUserVerifyEmail - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+	// 	return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+	// }
+
+	session.StartTransaction()
+
+	_, dbErr := userColl.InsertOne(ctx, user)
+
+	if dbErr != nil {
 		session.AbortTransaction(ctx)
-		logger.Error("user repository NewUserVerifyEmail - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
-		return nil, rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
+		logger.Error(fmt.Sprintf("user repository NewUserVerifyEmail could not insert user: %+v", user), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("error trying to insert user", errors.New("database error"))
 	}
+
+	// Insert Email Verification
+	_, insertErr := emailVerificationColl.InsertOne(ctx, emailVerification)
+	if insertErr != nil {
+		session.AbortTransaction(ctx)
+		logger.Error("user repository NewUserVerifyEmail transaction to insert email verification failed", insertErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("could not insert email verification", errors.New("database error"))
+	}
+
+	session.CommitTransaction(ctx)
 
 	logger.Info("user repository NewUserVerifyEmail finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return &user, nil
