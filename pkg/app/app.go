@@ -56,6 +56,7 @@ func StartApplication() {
 	router.Get("/api/v1/health", controllers.HealthCheck)
 
 	router.NotFound(controllers.NotFoundHandler)
+	router.HandleFunc("/favicon.ico", controllers.FaviconHandler)
 
 	// Auth
 	router.Mount("/api/v1/auth", controllers.NewAuthController(services.NewAuthService(repository.NewAuthRepository(), repository.NewTokenRepository())).Routes())
