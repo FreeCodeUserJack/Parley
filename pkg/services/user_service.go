@@ -10,6 +10,7 @@ import (
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
 	"github.com/FreeCodeUserJack/Parley/pkg/repository"
+	"github.com/FreeCodeUserJack/Parley/pkg/utils/aws_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/context_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/email_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/rest_errors"
@@ -80,12 +81,38 @@ func (u userService) NewUser(ctx context.Context, user domain.User) (*domain.Use
 
 	// Check if need to verify email
 	if user.Email != "" {
-		user.EmailVerified = "false"
-		emailVerification, err := email_utils.SendEmail(ctx, user.Email, user)
+		user.AccountVerified = "false"
+		accountVerification, err := email_utils.SendEmail(ctx, user.Email, user)
 		if err != nil {
 			return nil, err
 		}
-		return u.UserRepository.NewUserVerifyEmail(ctx, user, *emailVerification)
+		return u.UserRepository.NewUserVerifyAccount(ctx, user, *accountVerification)
+	}
+
+	// Check if need to verify phone number
+	if user.Phone != "" {
+		otp, err := aws_utils.GenerateOTP(6)
+		if err != nil {
+			logger.Error("could not generate OTP - random 6 digit code", err, context_utils.GetTraceAndClientIds(ctx)...)
+		}
+
+		accountVerification := domain.AccountVerification{
+			Id:             uuid.NewString(),
+			CreateDateTime: time.Now().UTC(),
+			UserId:         user.Id,
+			Phone:          user.Phone,
+			Type:           "phone",
+			OTP:            otp,
+			Status:         "new",
+		}
+
+		retUser, repoErr := u.UserRepository.NewUserVerifyAccount(ctx, user, accountVerification)
+		if repoErr != nil {
+			return nil, repoErr
+		}
+
+		aws_utils.SendSMS(ctx, user.Phone, otp)
+		return retUser, nil
 	}
 
 	logger.Info("user service NewUser finish", context_utils.GetTraceAndClientIds(ctx)...)

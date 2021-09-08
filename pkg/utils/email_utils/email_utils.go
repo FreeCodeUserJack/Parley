@@ -41,12 +41,14 @@ func init() {
 	}
 }
 
-func SendEmail(ctx context.Context, recipientEmail string, user domain.User) (*domain.EmailVerification, rest_errors.RestError) {
-	emailVerification := domain.EmailVerification{
+func SendEmail(ctx context.Context, recipientEmail string, user domain.User) (*domain.AccountVerification, rest_errors.RestError) {
+	emailVerification := domain.AccountVerification{
 		Id:             uuid.NewString(),
 		CreateDateTime: time.Now().UTC(),
 		UserId:         user.Id,
 		Email:          user.Email,
+		Type:           "email",
+		Status:         "new",
 	}
 
 	b, err := ioutil.ReadFile("../../oauth/gmail/credentials.json")

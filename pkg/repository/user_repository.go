@@ -20,7 +20,7 @@ import (
 
 type UserRepositoryInterface interface {
 	NewUser(context.Context, domain.User) (*domain.User, rest_errors.RestError)
-	NewUserVerifyEmail(context.Context, domain.User, domain.EmailVerification) (*domain.User, rest_errors.RestError)
+	NewUserVerifyAccount(context.Context, domain.User, domain.AccountVerification) (*domain.User, rest_errors.RestError)
 	GetUser(context.Context, string) (*domain.User, rest_errors.RestError)
 	UpdateUser(context.Context, string, domain.User) (*domain.User, rest_errors.RestError)
 	DeleteUser(context.Context, string) (*domain.User, rest_errors.RestError)
@@ -59,8 +59,8 @@ func (u userRepository) NewUser(ctx context.Context, user domain.User) (*domain.
 	return &user, nil
 }
 
-func (u userRepository) NewUserVerifyEmail(ctx context.Context, user domain.User, emailVerification domain.EmailVerification) (*domain.User, rest_errors.RestError) {
-	logger.Info("user repository NewUserVerifyEmail start", context_utils.GetTraceAndClientIds(ctx)...)
+func (u userRepository) NewUserVerifyAccount(ctx context.Context, user domain.User, accountVerification domain.AccountVerification) (*domain.User, rest_errors.RestError) {
+	logger.Info("user repository NewUserVerifyAccount start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	client, mongoErr := db.GetMongoClient()
 	if mongoErr != nil {
@@ -70,7 +70,7 @@ func (u userRepository) NewUserVerifyEmail(ctx context.Context, user domain.User
 
 	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
 	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
-	emailVerificationColl := client.Database(db.DatabaseName).Collection(db.EmailVerificationCollectionName, wcMajorityCollectionOpts)
+	accountVerificationColl := client.Database(db.DatabaseName).Collection(db.AccountVerificationCollectionName, wcMajorityCollectionOpts)
 	userColl := client.Database(db.DatabaseName).Collection(db.UsersCollectionName, wcMajorityCollectionOpts)
 
 	// callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
@@ -94,7 +94,7 @@ func (u userRepository) NewUserVerifyEmail(ctx context.Context, user domain.User
 
 	session, err := client.StartSession()
 	if err != nil {
-		logger.Error("user repository NewUserVerifyEmail - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		logger.Error("user repository NewUserVerifyAccount - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
 	}
 	defer session.EndSession(ctx)
@@ -112,21 +112,21 @@ func (u userRepository) NewUserVerifyEmail(ctx context.Context, user domain.User
 
 	if dbErr != nil {
 		session.AbortTransaction(ctx)
-		logger.Error(fmt.Sprintf("user repository NewUserVerifyEmail could not insert user: %+v", user), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+		logger.Error(fmt.Sprintf("user repository NewUserVerifyAccount could not insert user: %+v", user), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewInternalServerError("error trying to insert user", errors.New("database error"))
 	}
 
-	// Insert Email Verification
-	_, insertErr := emailVerificationColl.InsertOne(ctx, emailVerification)
+	// Insert Account Verification
+	_, insertErr := accountVerificationColl.InsertOne(ctx, accountVerification)
 	if insertErr != nil {
 		session.AbortTransaction(ctx)
-		logger.Error("user repository NewUserVerifyEmail transaction to insert email verification failed", insertErr, context_utils.GetTraceAndClientIds(ctx)...)
-		return nil, rest_errors.NewInternalServerError("could not insert email verification", errors.New("database error"))
+		logger.Error("user repository NewUserVerifyAccount transaction to insert account verification failed", insertErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewInternalServerError("could not insert account verification", errors.New("database error"))
 	}
 
 	session.CommitTransaction(ctx)
 
-	logger.Info("user repository NewUserVerifyEmail finish", context_utils.GetTraceAndClientIds(ctx)...)
+	logger.Info("user repository NewUserVerifyAccount finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return &user, nil
 }
 

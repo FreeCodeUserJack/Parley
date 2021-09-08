@@ -3,7 +3,6 @@ package controllers
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -84,7 +83,7 @@ func (u usersResource) NewUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("%+v\n", reqUser)
+	// fmt.Printf("%+v\n", reqUser)
 
 	result, serviceErr := u.UserService.NewUser(r.Context(), reqUser)
 	if serviceErr != nil {

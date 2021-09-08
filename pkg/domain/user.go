@@ -30,8 +30,8 @@ type User struct {
 	Public                   string    `bson:"public" json:"public"`
 	PendingFriendRequests    []string  `bson:"pending_friend_requests" json:"pending_friend_requests"`
 	SentFriendRequests       []string  `bson:"sent_friend_requests" json:"sent_friend_requests"`
-	EmailVerified            string    `bson:"email_verified" json:"email_verified"`
-	EmailVerification        string    `bson:"email_verification" json:"email_verification"`
+	AccountVerified          string    `bson:"account_verified" json:"account_verified"`
+	AccountVerification      string    `bson:"account_verification" json:"account_verification"`
 }
 
 func (u User) MarshalJSON() ([]byte, error) {
@@ -78,7 +78,7 @@ func (u User) Validate() bool {
 		return false
 	}
 
-	if u.Email == "" || u.Public == "" || u.Role == "" || u.Status == "" {
+	if u.Email == "" && u.Phone == "" || u.Public == "" || u.Role == "" || u.Status == "" {
 		return false
 	}
 
@@ -101,6 +101,6 @@ func (u *User) Sanitize() {
 	u.PendingAgreementRemovals = SanitizeStringSlice(u.PendingAgreementRemovals)
 	u.PendingLeaveAgreements = SanitizeStringSlice(u.PendingLeaveAgreements)
 	u.SentFriendRequests = SanitizeStringSlice(u.SentFriendRequests)
-	u.EmailVerified = strings.TrimSpace(html.EscapeString(u.EmailVerified))
-	u.EmailVerification = strings.TrimSpace(html.EscapeString(u.EmailVerification))
+	u.AccountVerified = strings.TrimSpace(html.EscapeString(u.AccountVerified))
+	u.AccountVerification = strings.TrimSpace(html.EscapeString(u.AccountVerification))
 }

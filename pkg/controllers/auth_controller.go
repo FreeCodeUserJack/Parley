@@ -17,34 +17,36 @@ import (
 	"github.com/go-chi/chi"
 )
 
-type OauthControllerInterface interface {
+type AuthControllerInterface interface {
 	Routes() chi.Router
 	Login(http.ResponseWriter, *http.Request)
 	Logout(http.ResponseWriter, *http.Request)
 	VerifyEmail(http.ResponseWriter, *http.Request)
+	VerifyPhone(http.ResponseWriter, *http.Request)
 }
 
-type oauthController struct {
+type authController struct {
 	AuthService services.AuthServiceInterface
 }
 
-func NewAuthController(authService services.AuthServiceInterface) OauthControllerInterface {
-	return &oauthController{
+func NewAuthController(authService services.AuthServiceInterface) AuthControllerInterface {
+	return &authController{
 		AuthService: authService,
 	}
 }
 
-func (o oauthController) Routes() chi.Router {
+func (o authController) Routes() chi.Router {
 	router := chi.NewRouter()
 
 	router.Post("/login", o.Login)
 	router.Get("/logout", o.Logout)
 	router.Get("/verifyEmail", o.VerifyEmail)
+	router.Get("/verifyPhone", o.VerifyPhone)
 
 	return router
 }
 
-func (o oauthController) Login(w http.ResponseWriter, r *http.Request) {
+func (o authController) Login(w http.ResponseWriter, r *http.Request) {
 	logger.Info("auth controller Login getting body", context_utils.GetTraceAndClientIds(r.Context())...)
 
 	reqBody, err := ioutil.ReadAll(r.Body)
@@ -81,13 +83,13 @@ func (o oauthController) Login(w http.ResponseWriter, r *http.Request) {
 	http_utils.ResponseJSON(w, http.StatusOK, res)
 }
 
-func (o oauthController) Logout(w http.ResponseWriter, r *http.Request) {
+func (o authController) Logout(w http.ResponseWriter, r *http.Request) {
 	logger.Info("auth controller Logout getting url param", context_utils.GetTraceAndClientIds(r.Context())...)
 
 	logger.Info("auth controller Logout returning to client", context_utils.GetTraceAndClientIds(r.Context())...)
 }
 
-func (o oauthController) VerifyEmail(w http.ResponseWriter, r *http.Request) {
+func (o authController) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	logger.Info("auth controller VerifyEmail getting url params", context_utils.GetTraceAndClientIds(r.Context())...)
 
 	tmpl := template.Must(template.ParseFiles("../../web/templates/email_verified.html"))
@@ -139,4 +141,38 @@ func (o oauthController) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("auth controller VerifyEmail returning to client", context_utils.GetTraceAndClientIds(r.Context())...)
 	tmpl.Execute(w, htmlInputs)
+}
+
+func (a authController) VerifyPhone(w http.ResponseWriter, r *http.Request) {
+	logger.Info("auth controller VerifyPhone getting url params", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	if !strings.Contains(r.URL.String(), "?") || !strings.Contains(r.URL.String(), "=") || !strings.Contains(r.URL.String(), "&") {
+		logger.Error("oauth controller VerifyEmail - no query params: "+r.URL.String(), errors.New("missing query"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("missing query params"))
+		return
+	}
+
+	querySplit := strings.Split(strings.Split(r.URL.String(), "?")[1], "&")
+
+	queryParams := []string{
+		strings.Split(querySplit[0], "=")[0],
+		strings.Split(querySplit[0], "=")[1],
+		strings.Split(querySplit[1], "=")[0],
+		strings.Split(querySplit[1], "=")[1],
+	}
+
+	if len(queryParams) != 4 {
+		logger.Error("oauth controller VerifyEmail - expected 2 query params: "+r.URL.String(), errors.New("# query param mismatched"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("incorrect # of query params"))
+		return
+	}
+
+	res, serviceErr := a.AuthService.VerifyPhone(r.Context(), queryParams)
+	if serviceErr != nil {
+		http_utils.ResponseError(w, serviceErr)
+		return
+	}
+
+	logger.Info("auth controller VerifyPhone returning to client", context_utils.GetTraceAndClientIds(r.Context())...)
+	http_utils.ResponseJSON(w, http.StatusOK, dto.Response{Message: "Phone verified for userId:", Id: res})
 }

@@ -15,29 +15,29 @@ var clientInstanceError error
 var mongoOnce sync.Once
 
 const (
-	envConnectionString                = "MONGODB_CONN_STRING"
-	envDatabaseName                    = "MONGODB_DATABASE_NAME"
-	envUsersCollectionName             = "MONGODB_USERS_COLLECTION_NAME"
-	envAgreementsCollectionName        = "MONGODB_AGREEMENT_COLLECTION_NAME"
-	envAgreementArchiveCollectionName  = "MONGODB_AGREEMENT_ARCHIVE_COLLECTION_NAME"
-	envNotificationCollectionName      = "MONGODB_NOTIFICATION_COLLECTION_NAME"
-	envTokenCollectionName             = "MONGODB_TOKEN_COLLECTION_NAME"
-	envReplicaSetName                  = "MONGODB_REPLICA_SET_NAME"
-	envEventResponsesCollectionName    = "MONGODB_EVENT_RESPONSE_COLLECTION_NAME"
-	envEmailVerificationCollectionName = "MONGODB_EMAIL_VERIFICATION_COLLECTION_NAME"
+	envConnectionString                  = "MONGODB_CONN_STRING"
+	envDatabaseName                      = "MONGODB_DATABASE_NAME"
+	envUsersCollectionName               = "MONGODB_USERS_COLLECTION_NAME"
+	envAgreementsCollectionName          = "MONGODB_AGREEMENT_COLLECTION_NAME"
+	envAgreementArchiveCollectionName    = "MONGODB_AGREEMENT_ARCHIVE_COLLECTION_NAME"
+	envNotificationCollectionName        = "MONGODB_NOTIFICATION_COLLECTION_NAME"
+	envTokenCollectionName               = "MONGODB_TOKEN_COLLECTION_NAME"
+	envReplicaSetName                    = "MONGODB_REPLICA_SET_NAME"
+	envEventResponsesCollectionName      = "MONGODB_EVENT_RESPONSE_COLLECTION_NAME"
+	envAccountVerificationCollectionName = "MONGODB_ACCOUNT_VERIFICATION_COLLECTION_NAME"
 )
 
 var (
-	mongoDBConnectionString         = "mongodb://localhost:27017"
-	DatabaseName                    = "parleyDB"
-	UsersCollectionName             = "users"
-	AgreementCollectionName         = "agreements"
-	AgreementArchiveCollectionName  = "agreement_archive"
-	NotificationCollectionName      = "notifications"
-	TokenCollectionName             = "tokens"
-	ReplicaSetName                  = "parleyset"
-	EventResponseCollectionName     = "event_responses"
-	EmailVerificationCollectionName = "email_verifications"
+	mongoDBConnectionString           = "mongodb://localhost:27017"
+	DatabaseName                      = "parleyDB"
+	UsersCollectionName               = "users"
+	AgreementCollectionName           = "agreements"
+	AgreementArchiveCollectionName    = "agreement_archive"
+	NotificationCollectionName        = "notifications"
+	TokenCollectionName               = "tokens"
+	ReplicaSetName                    = "parleyset"
+	EventResponseCollectionName       = "event_responses"
+	AccountVerificationCollectionName = "account_verifications"
 )
 
 func init() {
@@ -77,8 +77,8 @@ func init() {
 		EventResponseCollectionName = eventresponsescolname
 	}
 
-	if emailverificationcolname := os.Getenv(envEmailVerificationCollectionName); emailverificationcolname != "" {
-		EmailVerificationCollectionName = emailverificationcolname
+	if accverificationcolname := os.Getenv(envAccountVerificationCollectionName); accverificationcolname != "" {
+		AccountVerificationCollectionName = accverificationcolname
 	}
 }
 

@@ -18,6 +18,7 @@ type AuthServiceInterface interface {
 	Login(context.Context, dto.LoginRequest) (*domain.TokenDetails, rest_errors.RestError)
 	Logout(context.Context, string) (string, rest_errors.RestError)
 	VerifyEmail(context.Context, []string) (string, rest_errors.RestError)
+	VerifyPhone(context.Context, []string) (string, rest_errors.RestError)
 }
 
 type authService struct {
@@ -92,11 +93,52 @@ func (a authService) VerifyEmail(ctx context.Context, queryParams []string) (str
 	}
 
 	// Validate
-	if user.EmailVerified == "true" {
-		logger.Error("already verified email", fmt.Errorf("user instance: %+v", user), context_utils.GetTraceAndClientIds(ctx)...)
-		return "", rest_errors.NewBadRequestError("already verified email")
+	if user.AccountVerified == "email" || user.AccountVerified == "phone" {
+		logger.Error("already verified account", fmt.Errorf("user instance: %+v", user), context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewBadRequestError("already verified acount " + user.AccountVerified)
 	}
 
 	logger.Info("auth service VerifyEmail - finish", context_utils.GetTraceAndClientIds(ctx)...)
 	return a.AuthRepository.VerifyEmail(ctx, queryParams[1], queryParams[3])
+}
+
+func (a authService) VerifyPhone(ctx context.Context, queryParams []string) (string, rest_errors.RestError) {
+	logger.Info("auth service VerifyPhone - start", context_utils.GetTraceAndClientIds(ctx)...)
+
+	// Sanitize query params
+	queryParams = domain.SanitizeStringSlice(queryParams)
+
+	if queryParams[0] != "userId" || queryParams[2] != "otp" {
+		logger.Error("query params keys are invalid", fmt.Errorf("query params: %v", queryParams), context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewBadRequestError("invalid query params key")
+	}
+
+	// Get Current User
+	user, getErr := a.AuthRepository.GetUser(ctx, queryParams[1])
+	if getErr != nil {
+		logger.Error("auth service VerifyPhone - could not get saved user", getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", getErr
+	}
+
+	// Validate
+	if user.AccountVerified == "email" || user.AccountVerified == "phone" {
+		logger.Error("already verified account", fmt.Errorf("user instance: %+v", user), context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewBadRequestError("already verified acount " + user.AccountVerified)
+	}
+
+	// Get Current Account Verification
+	accVerification, getErr := a.AuthRepository.GetAccVerification(ctx, queryParams[1])
+	if getErr != nil {
+		logger.Error("auth service VerifyPhone - could not get saved account verification", getErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", getErr
+	}
+
+	// Validate
+	if accVerification.OTP != queryParams[3] {
+		logger.Error("mismatched otp", fmt.Errorf("OTP %s does not match account verification otp %+v", queryParams[3], accVerification), context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewBadRequestError("otp does not match")
+	}
+
+	logger.Info("auth service VerifyPhone - finish", context_utils.GetTraceAndClientIds(ctx)...)
+	return a.AuthRepository.VerifyPhone(ctx, queryParams[1], accVerification.Id)
 }
