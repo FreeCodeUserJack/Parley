@@ -10,11 +10,11 @@ import (
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
 	"github.com/FreeCodeUserJack/Parley/pkg/repository"
-	"github.com/FreeCodeUserJack/Parley/pkg/utils/aws_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/context_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/email_utils"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/rest_errors"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/security_utils"
+	"github.com/FreeCodeUserJack/Parley/pkg/utils/sms_utils"
 	"github.com/FreeCodeUserJack/Parley/tools/logger"
 	"github.com/google/uuid"
 )
@@ -91,7 +91,7 @@ func (u userService) NewUser(ctx context.Context, user domain.User) (*domain.Use
 
 	// Check if need to verify phone number
 	if user.Phone != "" {
-		otp, err := aws_utils.GenerateOTP(6)
+		otp, err := sms_utils.GenerateOTP(6)
 		if err != nil {
 			logger.Error("could not generate OTP - random 6 digit code", err, context_utils.GetTraceAndClientIds(ctx)...)
 		}
@@ -111,7 +111,7 @@ func (u userService) NewUser(ctx context.Context, user domain.User) (*domain.Use
 			return nil, repoErr
 		}
 
-		aws_utils.SendSMS(ctx, user.Phone, otp)
+		sms_utils.SendSMS(ctx, user.Phone, otp)
 		return retUser, nil
 	}
 

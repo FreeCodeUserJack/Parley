@@ -1,4 +1,4 @@
-package aws_utils
+package sms_utils
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func SendSMS(ctx context.Context, phone, otp string) {
 	if otp == "" {
 		otp, _ = GenerateOTP(6)
 	}
-	msgData.Set("Body", "Your code is: "+otp)
+	msgData.Set("Body", "Please login and enter your code: "+otp)
 
 	msgDataReader := *strings.NewReader(msgData.Encode())
 
