@@ -1,6 +1,7 @@
 package app
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -50,7 +51,7 @@ func StartApplication() {
 	router.Use(enforceJSONHandler)
 
 	// Auth Middleware
-	// router.Use(authMiddleware)
+	router.Use(authMiddleware)
 
 	// Health Check
 	router.Get("/api/v1/health", controllers.HealthCheck)
@@ -76,7 +77,21 @@ func StartApplication() {
 
 	logger.Info("app initialization finished")
 
-	if err := http.ListenAndServe(":"+port, router); err != nil {
-		logger.Fatal("app failed to ListenAndServe", err)
+	// if err := http.ListenAndServe(":"+port, router); err != nil {
+	// 	logger.Fatal("app failed to ListenAndServe", err)
+	// }
+
+	cert, _ := tls.LoadX509KeyPair("../../conf/server/pizzazzapp.crt", "../../conf/server/pizzazzapp.key")
+
+	s := &http.Server{
+		Addr:    ":8080",
+		Handler: router,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		},
+	}
+
+	if err := s.ListenAndServeTLS("", ""); err != nil {
+		logger.Fatal("app failed to ListenAndServeTLS", err)
 	}
 }
