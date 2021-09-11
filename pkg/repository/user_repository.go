@@ -434,13 +434,16 @@ func (u userRepository) GetAgreements(ctx context.Context, userId, status string
 
 	collection := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName)
 
+	queryOptions := options.FindOptions{}
+	queryOptions.SetSort(bson.D{primitive.E{Key: "create_datetime", Value: -1}})
+
 	filter := bson.D{primitive.E{Key: "created_by", Value: userId}}
 
 	if status == "new" {
 		filter = append(filter, primitive.E{Key: "status", Value: "new"})
 	}
 
-	curr, dbErr := collection.Find(ctx, filter)
+	curr, dbErr := collection.Find(ctx, filter, &queryOptions)
 	if dbErr != nil {
 		logger.Error("user repository GetAgreements - error trying to find agreements", dbErr, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, rest_errors.NewInternalServerError("error trying to search agreements", errors.New("database error"))
