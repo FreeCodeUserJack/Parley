@@ -27,7 +27,7 @@ type UserServiceInterface interface {
 	GetFriends(context.Context, string, []string) ([]domain.User, rest_errors.RestError)
 	RemoveFriend(context.Context, string, string) (*domain.User, rest_errors.RestError)
 	SearchUsers(context.Context, []string) ([]domain.User, rest_errors.RestError)
-	GetAgreements(context.Context, string) ([]domain.Agreement, rest_errors.RestError)
+	GetAgreements(context.Context, string, []string) ([]domain.Agreement, rest_errors.RestError)
 	AddFriend(context.Context, string, string, string) (*domain.User, rest_errors.RestError)
 	RespondFriendRequest(context.Context, string, string, string) (*domain.User, rest_errors.RestError)
 }
@@ -257,14 +257,28 @@ func (u userService) SearchUsers(ctx context.Context, queries []string) ([]domai
 	return u.UserRepository.SearchUsers(ctx, input)
 }
 
-func (u userService) GetAgreements(ctx context.Context, userId string) ([]domain.Agreement, rest_errors.RestError) {
+func (u userService) GetAgreements(ctx context.Context, userId string, queries []string) ([]domain.Agreement, rest_errors.RestError) {
 	logger.Info("user service GetAgreements start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	// Sanitize ids
 	userId = strings.TrimSpace(html.EscapeString(userId))
+	queries = domain.SanitizeStringSlice(queries)
+
+	if len(queries) != 2 {
+		logger.Error("queries doesn't have type and value", fmt.Errorf("queries: %v", queries), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("invalid query format")
+	}
+
+	queryKey := queries[0]
+	queryVal := queries[1]
+
+	if queryKey != "type" || queryVal != "all" && queryVal != "new" {
+		logger.Error("queries key / values are incorrect", fmt.Errorf("queries: %v", queries), context_utils.GetTraceAndClientIds(ctx)...)
+		return nil, rest_errors.NewBadRequestError("invalid query key and/or value")
+	}
 
 	logger.Info("user service GetAgreements finish", context_utils.GetTraceAndClientIds(ctx)...)
-	return u.UserRepository.GetAgreements(ctx, userId)
+	return u.UserRepository.GetAgreements(ctx, userId, queryVal)
 }
 
 func (u userService) AddFriend(ctx context.Context, userId, friendId, message string) (*domain.User, rest_errors.RestError) {

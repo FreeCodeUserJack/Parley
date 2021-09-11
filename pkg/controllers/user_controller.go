@@ -308,7 +308,17 @@ func (u usersResource) GetAgreements(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, serviceErr := u.UserService.GetAgreements(r.Context(), userId)
+	logger.Info("user controller GetAgreements about to get query param", context_utils.GetTraceAndClientIds(r.Context())...)
+
+	if !strings.Contains(r.URL.String(), "?") || !strings.Contains(r.URL.String(), "=") {
+		logger.Error("user controller GetAgreements - no query params: "+r.URL.String(), errors.New("missing query"), context_utils.GetTraceAndClientIds(r.Context())...)
+		http_utils.ResponseError(w, rest_errors.NewBadRequestError("missing query params"))
+		return
+	}
+
+	queries := strings.Split(strings.Split(r.URL.String(), "?")[1], "=")
+
+	res, serviceErr := u.UserService.GetAgreements(r.Context(), userId, queries)
 	if serviceErr != nil {
 		http_utils.ResponseError(w, serviceErr)
 		return

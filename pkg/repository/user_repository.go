@@ -27,7 +27,7 @@ type UserRepositoryInterface interface {
 	GetFriends(context.Context, string, []string) ([]domain.User, rest_errors.RestError)
 	RemoveFriend(context.Context, string, string, domain.Notification) (*domain.User, rest_errors.RestError)
 	SearchUsers(context.Context, [][]string) ([]domain.User, rest_errors.RestError)
-	GetAgreements(context.Context, string) ([]domain.Agreement, rest_errors.RestError)
+	GetAgreements(context.Context, string, string) ([]domain.Agreement, rest_errors.RestError)
 	AddFriend(context.Context, string, string, domain.Notification) (*domain.User, rest_errors.RestError)
 	RespondFriendRequest(context.Context, string, string, domain.Notification) (*domain.User, rest_errors.RestError)
 }
@@ -423,7 +423,7 @@ func (u userRepository) SearchUsers(ctx context.Context, queries [][]string) ([]
 	return res, nil
 }
 
-func (u userRepository) GetAgreements(ctx context.Context, userId string) ([]domain.Agreement, rest_errors.RestError) {
+func (u userRepository) GetAgreements(ctx context.Context, userId, status string) ([]domain.Agreement, rest_errors.RestError) {
 	logger.Info("user repository GetAgreements start", context_utils.GetTraceAndClientIds(ctx)...)
 
 	client, mongoErr := db.GetMongoClient()
@@ -435,6 +435,10 @@ func (u userRepository) GetAgreements(ctx context.Context, userId string) ([]dom
 	collection := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName)
 
 	filter := bson.D{primitive.E{Key: "created_by", Value: userId}}
+
+	if status == "new" {
+		filter = append(filter, primitive.E{Key: "status", Value: "new"})
+	}
 
 	curr, dbErr := collection.Find(ctx, filter)
 	if dbErr != nil {
