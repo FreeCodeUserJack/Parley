@@ -807,6 +807,7 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
 	notificationColl := client.Database(db.DatabaseName).Collection(db.NotificationCollectionName, wcMajorityCollectionOpts)
 	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
+	userColl := client.Database(db.DatabaseName).Collection(db.UsersCollectionName, wcMajorityCollectionOpts)
 
 	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
 		// insert notification
@@ -834,6 +835,33 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 			if err != nil {
 				return nil, err
 			}
+		}
+
+		// Update User if acceptInvite or acceptRequest
+
+		filter2 := bson.D{}
+
+		if notification.Action == "acceptInvite" {
+			filter2 = append(filter2, primitive.E{Key: "_id", Value: notification.ContactId})
+		}
+
+		if notification.Action == "acceptRequest" {
+			filter2 = append(filter2, primitive.E{Key: "_id", Value: notification.UserId})
+		}
+
+		updater := bson.D{primitive.E{Key: "$push", Value: bson.D{
+			primitive.E{Key: "agreements", Value: notification.AgreementId},
+		}}}
+
+		_, dbErr2 := userColl.UpdateOne(ctx, filter2, updater)
+
+		if dbErr2 != nil {
+			if dbErr2.Error() == "mongo: no documents in result" {
+				logger.Error(fmt.Sprintf("No user found for notification: %+v: ", notification), dbErr2, context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewNotFoundError("No user found for actionAndNotification")
+			}
+			logger.Error(fmt.Sprintf("agreement repository ActionAndNotification could not update user for notification: %+v", notification), dbErr2, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError("error trying to update user for actionAndNotification", errors.New("database error"))
 		}
 
 		return nil, nil
@@ -1083,15 +1111,15 @@ func (a agreementRepository) NewEventAgreement(ctx context.Context, agreement do
 		updater := bson.D{primitive.E{Key: "$push", Value: bson.D{
 			primitive.E{Key: "agreements", Value: agreement.Id},
 		}}}
-	
+
 		_, dbErr2 := userColl.UpdateOne(ctx, filter, updater)
-	
+
 		if dbErr2 != nil {
 			if dbErr2.Error() == "mongo: no documents in result" {
 				logger.Error(fmt.Sprintf("No user found for id: %s: ", agreement.CreatedBy), dbErr2, context_utils.GetTraceAndClientIds(ctx)...)
 				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No user found for id: %s", agreement.Id))
 			}
-			logger.Error(fmt.Sprintf("agreement repository NewEventAgreement could not FindOneAndUpdate user id: %s", agreement.CreatedBy), dbErr2, context_utils.GetTraceAndClientIds(ctx)...)
+			logger.Error(fmt.Sprintf("agreement repository NewEventAgreement could not update user id: %s", agreement.CreatedBy), dbErr2, context_utils.GetTraceAndClientIds(ctx)...)
 			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to update user id: %s", agreement.CreatedBy), errors.New("database error"))
 		}
 
@@ -1245,6 +1273,7 @@ func (a agreementRepository) RespondEventInvite(ctx context.Context, agreement d
 	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
 	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
 	eventResponseColl := client.Database(db.DatabaseName).Collection(db.EventResponseCollectionName, wcMajorityCollectionOpts)
+	userColl := client.Database(db.DatabaseName).Collection(db.UsersCollectionName, wcMajorityCollectionOpts)
 
 	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
 		// Update Agreement
@@ -1265,6 +1294,25 @@ func (a agreementRepository) RespondEventInvite(ctx context.Context, agreement d
 			}
 			logger.Error(fmt.Sprintf("agreement repository RespondEventInvite could not FindOneAndUpdate id: %s", agreement.Id), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
 			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to respond invite for event id: %s", agreement.Id), errors.New("database error"))
+		}
+
+		if eventResponse.Response == "accept" {
+			filter := bson.D{primitive.E{Key: "_id", Value: eventResponse.UserId}}
+
+			updater := bson.D{primitive.E{Key: "$push", Value: bson.D{
+				primitive.E{Key: "agreements", Value: agreement.Id},
+			}}}
+
+			_, dbErr2 := userColl.UpdateOne(ctx, filter, updater)
+
+			if dbErr2 != nil {
+				if dbErr2.Error() == "mongo: no documents in result" {
+					logger.Error(fmt.Sprintf("No user found for id: %s: ", agreement.CreatedBy), dbErr2, context_utils.GetTraceAndClientIds(ctx)...)
+					return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No user found for id: %s", agreement.Id))
+				}
+				logger.Error(fmt.Sprintf("agreement repository RespondEventInvite could not update user id: %s", agreement.CreatedBy), dbErr2, context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to update user id: %s", agreement.CreatedBy), errors.New("database error"))
+			}
 		}
 
 		// Insert EventResponse
