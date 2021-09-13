@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/controllers"
+	"github.com/FreeCodeUserJack/Parley/pkg/db"
 	"github.com/FreeCodeUserJack/Parley/pkg/repository"
 	"github.com/FreeCodeUserJack/Parley/pkg/services"
 	"github.com/FreeCodeUserJack/Parley/tools/logger"
@@ -25,6 +26,8 @@ func StartApplication() {
 			fmt.Printf("StartApplication panic caught: %v\n", r)
 		}
 	}()
+
+	defer db.CloseClient()
 
 	logger.Info("app initialization started")
 

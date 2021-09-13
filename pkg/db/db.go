@@ -104,3 +104,7 @@ func GetMongoClient() (*mongo.Client, error) {
 
 	return clientInstance, clientInstanceError
 }
+
+func CloseClient() {
+	clientInstance.Disconnect(context.TODO())
+}
