@@ -50,7 +50,7 @@ func StartApplication() {
 	router.Use(enforceJSONHandler)
 
 	// Auth Middleware
-	// router.Use(authMiddleware)
+	router.Use(authMiddleware)
 
 	// Health Check
 	router.Get("/api/v1/health", controllers.HealthCheck)

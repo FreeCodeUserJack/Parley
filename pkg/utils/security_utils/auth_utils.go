@@ -2,6 +2,7 @@ package security_utils
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/FreeCodeUserJack/Parley/pkg/domain"
@@ -30,7 +31,7 @@ func GenerateToken(ctx context.Context, userId string) (*domain.TokenDetails, er
 	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
 
 	var err error
-	td.AccessToken, err = at.SignedString([]byte(accessSecret))
+	td.AccessToken, err = at.SignedString([]byte(os.Getenv(EnvAccessSecret)))
 	if err != nil {
 		logger.Error("crypto_utils GenerateToken - could not generate access token", err, context_utils.GetTraceAndClientIds(ctx)...)
 		return nil, err
