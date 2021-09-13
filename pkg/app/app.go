@@ -50,7 +50,8 @@ func StartApplication() {
 	router.Use(enforceJSONHandler)
 
 	// Auth Middleware
-	router.Use(authMiddleware)
+	//e := casbin.NewEnforcer("../../conf/auth/auth_models.conf", "../../conf/auth/auth_policy.csv")
+	//router.Use(authMiddleware)
 
 	// Health Check
 	router.Get("/api/v1/health", controllers.HealthCheck)

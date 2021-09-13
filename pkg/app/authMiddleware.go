@@ -3,12 +3,14 @@ package app
 import (
 	"fmt"
 	"github.com/FreeCodeUserJack/Parley/pkg/utils/security_utils"
+	"github.com/FreeCodeUserJack/Parley/tools/logger"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/golang-jwt/jwt"
 
+	"github.com/casbin/casbin"
 	"github.com/go-chi/chi"
 )
 
@@ -22,7 +24,14 @@ func authMiddleware(next http.Handler) http.Handler {
 
 		err := TokenValid(r)
 		if err != nil {
-			http.Error(w, "auth middleware error", http.StatusBadRequest)
+			http.Error(w, "auth middleware error: Authentication Failed", http.StatusUnauthorized)
+			return
+		}
+
+		e := casbin.NewEnforcer("./auth_models.conf", "./auth_policy.csv")
+		err = VerifyAuthorization(e, r)
+		if err != nil {
+			http.Error(w, "auth middleware error: Authorization Failed", http.StatusUnauthorized)
 			return
 		}
 
@@ -64,4 +73,40 @@ func ExtractToken(r *http.Request) string {
 		return strArr[1]
 	}
 	return ""
+}
+
+func VerifyAuthorization(e *casbin.Enforcer, r *http.Request) error {
+	// get roles. TODO: need to read from DB
+	role := ""
+	if role == "" {
+		role = "anonymous"
+	}
+	// if it's a member, check if the user still exists
+	//if role == "member" {
+	//	uid, err := session.GetInt(r, "userID")
+	//	if err != nil {
+	//		writeError(http.StatusInternalServerError, "ERROR", w, err)
+	//		return
+	//	}
+	//	exists := users.Exists(uid)
+	//	if !exists {
+	//		writeError(http.StatusForbidden, "FORBIDDEN", w, errors.New("user does not exist"))
+	//		return
+	//	}
+	//}
+
+	// casbin enforce
+	res, err := e.EnforceSafe(role, r.URL.Path, r.Method)
+
+	if err != nil {
+		return err
+	}
+	if res {
+		logger.Info("has the authorization")
+		return nil
+	} else {
+		logger.Info("FORBIDDEN")
+		return err
+	}
+
 }
