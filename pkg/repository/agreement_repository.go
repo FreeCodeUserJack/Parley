@@ -85,9 +85,14 @@ func (a agreementRepository) NewAgreement(ctx context.Context, agreement domain.
 	// Update User
 	filter := bson.D{primitive.E{Key: "_id", Value: agreement.CreatedBy}}
 
-	updater := bson.D{primitive.E{Key: "$push", Value: bson.D{
-		primitive.E{Key: "agreements", Value: agreement.Id},
-	}}}
+	updater := bson.D{
+		primitive.E{Key: "$push", Value: bson.D{
+			primitive.E{Key: "agreements", Value: agreement.Id}},
+		},
+		primitive.E{Key: "$set", Value: bson.D{
+			primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()}},
+		},
+	}
 
 	_, dbErr := userColl.UpdateOne(ctx, filter, updater)
 
@@ -541,17 +546,61 @@ func (a agreementRepository) RemoveUserFromAgreement(ctx context.Context, agreem
 		return "", rest_errors.NewInternalServerError("error when trying to get db client", errors.New("database error"))
 	}
 
-	collection := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName)
+	wcMajority := writeconcern.New(writeconcern.WMajority(), writeconcern.WTimeout(1*time.Second))
+	wcMajorityCollectionOpts := options.Collection().SetWriteConcern(wcMajority)
+	userColl := client.Database(db.DatabaseName).Collection(db.UsersCollectionName, wcMajorityCollectionOpts)
+	agreementColl := client.Database(db.DatabaseName).Collection(db.AgreementCollectionName, wcMajorityCollectionOpts)
 
-	res, dbErr := collection.UpdateOne(ctx, filter, updater)
-	if dbErr != nil {
-		logger.Error(fmt.Sprintf("agreement repository RemoveUserFromAgreement failed to update (agreementId:friendId): %s:%s", agreementId, friendId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
-		return "", rest_errors.NewInternalServerError("", errors.New("database error"))
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// Update Agreement
+		res, dbErr := agreementColl.UpdateOne(ctx, filter, updater)
+		if dbErr != nil {
+			logger.Error(fmt.Sprintf("agreement repository RemoveUserFromAgreement failed to update (agreementId:friendId): %s:%s", agreementId, friendId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return "", rest_errors.NewInternalServerError("", errors.New("database error"))
+		}
+
+		if res.MatchedCount == 0 {
+			logger.Error(fmt.Sprintf("agreement repository RemoveUserFromAgreement - No agreement found for id: %s: ", agreementId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
+			return "", rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", agreementId))
+		}
+
+		// Update User
+		filter2 := bson.D{primitive.E{Key: "_id", Value: friendId}}
+
+		updater2 := bson.D{
+			primitive.E{Key: "$pull", Value: bson.D{
+				primitive.E{Key: "agreements", Value: agreementId}},
+			},
+			primitive.E{Key: "$set", Value: bson.D{
+				primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()}},
+			},
+		}
+
+		_, dbErr2 := userColl.UpdateOne(ctx, filter2, updater2)
+
+		if dbErr2 != nil {
+			if dbErr2.Error() == "mongo: no documents in result" {
+				logger.Error(fmt.Sprintf("No user found for id: %s: ", friendId), dbErr2, context_utils.GetTraceAndClientIds(ctx)...)
+				return nil, rest_errors.NewNotFoundError(fmt.Sprintf("No user found for id: %s", friendId))
+			}
+			logger.Error(fmt.Sprintf("agreement repository NewEventAgreement could not update user id: %s", friendId), dbErr2, context_utils.GetTraceAndClientIds(ctx)...)
+			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to update user id: %s", friendId), errors.New("database error"))
+		}
+
+		return nil, nil
 	}
 
-	if res.MatchedCount == 0 {
-		logger.Error(fmt.Sprintf("agreement repository RemoveUserFromAgreement - No agreement found for id: %s: ", agreementId), dbErr, context_utils.GetTraceAndClientIds(ctx)...)
-		return "", rest_errors.NewNotFoundError(fmt.Sprintf("No agreement found for id: %s", agreementId))
+	session, err := client.StartSession()
+	if err != nil {
+		logger.Error("agreement repository RemoveUserFromAgreement - could not start session", err, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("db session failed", errors.New("database error"))
+	}
+	defer session.EndSession(ctx)
+
+	_, transactionErr := session.WithTransaction(ctx, callback)
+	if transactionErr != nil {
+		logger.Error("agreement repository RemoveUserFromAgreement - transaction failed", transactionErr, context_utils.GetTraceAndClientIds(ctx)...)
+		return "", rest_errors.NewInternalServerError("db transaction failed", errors.New("database error"))
 	}
 
 	logger.Info("agreement repository RemoveUserFromAgreement finish", context_utils.GetTraceAndClientIds(ctx)...)
@@ -817,8 +866,11 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 
 		filter := bson.D{primitive.E{Key: "_id", Value: notification.AgreementId}}
 		updater1 := bson.D{primitive.E{Key: actionInputs[0], Value: bson.D{
-			primitive.E{Key: actionInputs[1], Value: notification.UserId},
-		}}}
+			primitive.E{Key: actionInputs[1], Value: notification.UserId}}},
+			primitive.E{Key: "$set", Value: bson.D{
+				primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()}},
+			},
+		}
 
 		_, err2 := agreementColl.UpdateOne(sessCtx, filter, updater1)
 		if err2 != nil {
@@ -828,8 +880,11 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 		// update agreement slices
 		if len(actionInputs) > 2 {
 			updater2 := bson.D{primitive.E{Key: actionInputs[2], Value: bson.D{
-				primitive.E{Key: actionInputs[3], Value: notification.UserId},
-			}}}
+				primitive.E{Key: actionInputs[3], Value: notification.UserId}}},
+				primitive.E{Key: "$set", Value: bson.D{
+					primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()}},
+				},
+			}
 
 			_, err := agreementColl.UpdateOne(sessCtx, filter, updater2)
 			if err != nil {
@@ -838,20 +893,35 @@ func (a agreementRepository) ActionAndNotification(ctx context.Context, actionIn
 		}
 
 		// Update User if acceptInvite or acceptRequest
-
 		filter2 := bson.D{}
 
-		if notification.Action == "acceptInvite" {
+		if notification.Action == "acceptInvite" || notification.Action == "acceptRemove" {
 			filter2 = append(filter2, primitive.E{Key: "_id", Value: notification.ContactId})
 		}
 
-		if notification.Action == "acceptRequest" {
+		if notification.Action == "acceptRequest" || notification.Action == "acceptLeave" {
 			filter2 = append(filter2, primitive.E{Key: "_id", Value: notification.UserId})
 		}
 
-		updater := bson.D{primitive.E{Key: "$push", Value: bson.D{
-			primitive.E{Key: "agreements", Value: notification.AgreementId},
-		}}}
+		var updater bson.D
+
+		if notification.Action == "acceptInvite" || notification.Action == "acceptRequest" {
+			updater = bson.D{primitive.E{Key: "$push", Value: bson.D{
+				primitive.E{Key: "agreements", Value: notification.AgreementId},
+			}}}
+		}
+
+		if notification.Action == "acceptRemove" || notification.Action == "acceptLeave" {
+			updater = bson.D{primitive.E{Key: "$pull", Value: bson.D{
+				primitive.E{Key: "agreements", Value: notification.AgreementId},
+			}}}
+		}
+
+		updater = append(updater, primitive.E{
+			Key: "$set", Value: bson.D{
+				primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
+			},
+		})
 
 		_, dbErr2 := userColl.UpdateOne(ctx, filter2, updater)
 
@@ -912,8 +982,11 @@ func (a agreementRepository) UpdateAgreementRead(ctx context.Context, agreement 
 
 		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
 			primitive.E{Key: "agreement_accept", Value: agreement.AgreementAccept},
-			primitive.E{Key: "agreement_decline", Value: agreement.AgreementDecline},
-		}}}
+			primitive.E{Key: "agreement_decline", Value: agreement.AgreementDecline}}},
+			primitive.E{Key: "$set", Value: bson.D{
+				primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()}},
+			},
+		}
 
 		res := agreementColl.FindOneAndUpdate(ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
@@ -1109,8 +1182,13 @@ func (a agreementRepository) NewEventAgreement(ctx context.Context, agreement do
 		filter := bson.D{primitive.E{Key: "_id", Value: agreement.CreatedBy}}
 
 		updater := bson.D{primitive.E{Key: "$push", Value: bson.D{
-			primitive.E{Key: "agreements", Value: agreement.Id},
-		}}}
+			primitive.E{Key: "agreements", Value: agreement.Id}}},
+			primitive.E{
+				Key: "$set", Value: bson.D{
+					primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
+				},
+			},
+		}
 
 		_, dbErr2 := userColl.UpdateOne(ctx, filter, updater)
 
@@ -1215,8 +1293,11 @@ func (a agreementRepository) InviteUsersToEvent(ctx context.Context, agreement d
 		filter := bson.D{primitive.E{Key: "_id", Value: agreement.Id}}
 
 		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
-			primitive.E{Key: "invited_participants", Value: agreement.InvitedParticipants},
-		}}}
+			primitive.E{Key: "invited_participants", Value: agreement.InvitedParticipants}}},
+			primitive.E{Key: "$set", Value: bson.D{
+				primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()}},
+			},
+		}
 
 		_, dbErr := agreementColl.UpdateOne(ctx, filter, updater)
 
@@ -1282,8 +1363,11 @@ func (a agreementRepository) RespondEventInvite(ctx context.Context, agreement d
 		updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
 			primitive.E{Key: "event_responses", Value: agreement.EventResponses},
 			primitive.E{Key: "agreement_accept", Value: agreement.AgreementAccept},
-			primitive.E{Key: "agreement_decline", Value: agreement.AgreementDecline},
-		}}}
+			primitive.E{Key: "agreement_decline", Value: agreement.AgreementDecline}}},
+			primitive.E{Key: "$set", Value: bson.D{
+				primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()}},
+			},
+		}
 
 		_, dbErr := agreementColl.UpdateOne(ctx, filter, updater)
 
@@ -1296,12 +1380,18 @@ func (a agreementRepository) RespondEventInvite(ctx context.Context, agreement d
 			return nil, rest_errors.NewInternalServerError(fmt.Sprintf("error trying to respond invite for event id: %s", agreement.Id), errors.New("database error"))
 		}
 
+		// Update User if Accept
 		if eventResponse.Response == "accept" {
 			filter := bson.D{primitive.E{Key: "_id", Value: eventResponse.UserId}}
 
 			updater := bson.D{primitive.E{Key: "$push", Value: bson.D{
-				primitive.E{Key: "agreements", Value: agreement.Id},
-			}}}
+				primitive.E{Key: "agreements", Value: agreement.Id}}},
+				primitive.E{
+					Key: "$set", Value: bson.D{
+						primitive.E{Key: "last_update_datetime", Value: time.Now().UTC()},
+					},
+				},
+			}
 
 			_, dbErr2 := userColl.UpdateOne(ctx, filter, updater)
 
