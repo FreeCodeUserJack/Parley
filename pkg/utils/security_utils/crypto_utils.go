@@ -12,8 +12,8 @@ import (
 
 const (
 	envPasswordSalt  = "PASSWORD_SALT"
-	envAccessSecret  = "ACCESS_SECRET"
-	envRefreshSecret = "REFRESH_SECRET"
+	EnvAccessSecret  = "ACCESS_SECRET"
+	EnvRefreshSecret = "REFRESH_SECRET"
 )
 
 var (
@@ -27,11 +27,11 @@ func init() {
 	// 	passwordSalt = salt
 	// }
 
-	if secret := os.Getenv(envAccessSecret); secret != "" {
-		accessSecret = secret
+	if secret := os.Getenv(EnvAccessSecret); secret == "" {
+		os.Setenv(EnvAccessSecret, accessSecret)
 	}
 
-	if refresh := os.Getenv(envRefreshSecret); refresh != "" {
+	if refresh := os.Getenv(EnvRefreshSecret); refresh != "" {
 		refreshSecret = refresh
 	}
 }
